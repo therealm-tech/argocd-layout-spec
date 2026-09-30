@@ -1,0 +1,5 @@
+quayCharts: oci://quay.io
+ghcrCharts: oci://ghcr.io
+quayImages: quay.io
+dockerImages: docker.io
+secretStore: vault

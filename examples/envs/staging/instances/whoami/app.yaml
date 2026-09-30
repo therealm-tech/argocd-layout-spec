@@ -1,0 +1,7 @@
+sources:
+  chart:
+    type: helm
+    repoURL: https://cowboysysop.github.io
+    repository: charts
+    chart: whoami
+    targetRevision: 6.0.0

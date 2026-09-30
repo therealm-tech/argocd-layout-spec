@@ -1,0 +1,5 @@
+toolbox:
+  enabled: true
+cephClusterSpec:
+  mon:
+    count: 3

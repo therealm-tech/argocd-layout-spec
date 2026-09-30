@@ -1,0 +1,3 @@
+cephClusterSpec:
+  storage:
+    deviceFilter: nvme[0-3]n1

@@ -1,0 +1,10 @@
+sources:
+  chart:
+    type: helm
+    repoURL:
+      property: quayCharts
+    repository: jetstack/charts
+    chart: cert-manager
+    targetRevision: v1.19.1
+    properties:
+      image.registry: quayImages

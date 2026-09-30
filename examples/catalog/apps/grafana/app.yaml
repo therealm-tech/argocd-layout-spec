@@ -1,0 +1,14 @@
+sources:
+  chart:
+    type: helm
+    repoURL:
+      property: ghcrCharts
+    repository: grafana/helm-charts
+    chart: grafana
+    targetRevision: 10.1.4
+    properties:
+      global.imageRegistry: dockerImages
+manifests:
+  properties:
+    external-secrets.io/ExternalSecret/grafana-admin:
+      /spec/secretStoreRef/name: secretStore

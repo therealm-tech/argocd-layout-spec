@@ -1,0 +1,13 @@
+extends: default
+
+rules:
+  document-start:
+    present: false
+  braces:
+    forbid: non-empty
+  brackets:
+    forbid: non-empty
+  line-length: disable
+  # GitHub Actions workflows start with a bare `on:` key.
+  truthy:
+    check-keys: false
