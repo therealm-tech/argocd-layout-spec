@@ -1,0 +1,9 @@
+manifests:
+  properties:
+    argoproj.io/ApplicationSet/layout_argocd:
+      /spec/template/spec/source/repoURL: layoutRepoURL
+      /spec/template/spec/source/targetRevision: layoutRevision
+      /spec/template/spec/source/path: layoutPath
+      /spec/template/spec/source/helm/valuesObject/layout/repoURL: layoutRepoURL
+      /spec/template/spec/source/helm/valuesObject/layout/targetRevision: layoutRevision
+      /spec/template/spec/source/helm/valuesObject/layout/path: layoutPath

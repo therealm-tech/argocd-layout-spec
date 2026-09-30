@@ -1,5 +1,9 @@
-quayCharts: oci://quay.io
-ghcrCharts: oci://ghcr.io
+quayCharts: quay.io
+ghcrCharts: ghcr.io
+rookCharts: https://charts.rook.io
 quayImages: quay.io
 dockerImages: docker.io
 secretStore: vault
+layoutRepoURL: https://github.com/therealm-tech/argocd-layout-spec
+layoutRevision: HEAD
+layoutPath: examples

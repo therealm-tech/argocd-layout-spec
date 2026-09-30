@@ -24,7 +24,24 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.13"
+      - name: set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5.0.1
+        with:
+          version: v4.2.4
       - name: install pre-commit
         run: pip install pre-commit==4.6.2
       - name: run pre-commit
         run: pre-commit run --all-files --show-diff-on-failure
+
+  render:
+    name: render
+    runs-on: ubuntu-24.04
+    steps:
+      - name: check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5.0.1
+        with:
+          version: v4.2.4
+      - name: render the example layout
+        run: tests/render.sh

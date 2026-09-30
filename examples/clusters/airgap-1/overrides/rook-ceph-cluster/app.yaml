@@ -1,4 +1,0 @@
-sources:
-  chart:
-    repoURL: https://harbor.airgap.internal
-    repository: chartrepo/rook

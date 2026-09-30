@@ -1,0 +1,51 @@
+# Creates one Application per cluster registered in Argo CD, each rendering the
+# layout chart for that cluster. Applied once by hand to bootstrap, then managed
+# by the layout itself.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: layout
+  namespace: argocd
+  annotations:
+    # Deleting this ApplicationSet cascades to every Application it generated:
+    # removing the instance from an env.yaml must not be enough to do it.
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  syncPolicy:
+    applicationsSync: sync
+    preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      name: layout-{{ .nameNormalized }}
+    spec:
+      project: default
+      revisionHistoryLimit: 0
+      source:
+        repoURL: https://github.com/therealm-tech/argocd-layout-spec
+        targetRevision: HEAD
+        path: examples
+        helm:
+          valuesObject:
+            cluster: "{{ .name }}"
+            layout:
+              repoURL: https://github.com/therealm-tech/argocd-layout-spec
+              targetRevision: HEAD
+              path: examples
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        retry:
+          limit: 10
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 5m

@@ -1,0 +1,335 @@
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-layout-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: layout
+  sources:
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/catalog/apps/layout/manifests
+      kustomize:
+        patches:
+          - target:
+              group: argoproj.io
+              kind: ApplicationSet
+              name: layout
+              namespace: argocd
+            patch: |-
+              - op: add
+                path: /spec/template/spec/source/helm/valuesObject/layout/path
+                value: "examples"
+              - op: add
+                path: /spec/template/spec/source/helm/valuesObject/layout/repoURL
+                value: "https://github.com/therealm-tech/argocd-layout-spec"
+              - op: add
+                path: /spec/template/spec/source/helm/valuesObject/layout/targetRevision
+                value: "HEAD"
+              - op: add
+                path: /spec/template/spec/source/path
+                value: "examples"
+              - op: add
+                path: /spec/template/spec/source/repoURL
+                value: "https://github.com/therealm-tech/argocd-layout-spec"
+              - op: add
+                path: /spec/template/spec/source/targetRevision
+                value: "HEAD"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-ceph-hdd-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: ceph-hdd
+  sources:
+    - repoURL: https://charts.rook.io/release
+      chart: rook-ceph-cluster
+      targetRevision: "v1.20.8"
+      helm:
+        releaseName: ceph-hdd
+        valueFiles:
+          - $layout/examples/catalog/apps/rook-ceph-cluster/values/chart.yaml
+          - $layout/examples/envs/prod/instances/ceph-hdd/values/chart.yaml
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/catalog/apps/rook-ceph-cluster/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-cert-manager-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: cert-manager
+  sources:
+    - repoURL: quay.io/jetstack/charts
+      chart: cert-manager
+      targetRevision: "v1.21.2"
+      helm:
+        releaseName: cert-manager
+        valueFiles:
+          - $layout/examples/catalog/apps/cert-manager/values/chart.yaml
+        parameters:
+          - name: image.registry
+            value: "quay.io"
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/catalog/apps/cert-manager/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-grafana-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: grafana
+  sources:
+    - repoURL: ghcr.io/grafana/helm-charts
+      chart: grafana
+      targetRevision: "10.5.15"
+      helm:
+        releaseName: grafana
+        valueFiles:
+          - $layout/examples/catalog/apps/grafana/values/chart.yaml
+          - $layout/examples/envs/prod/instances/grafana/values/chart.yaml
+        parameters:
+          - name: global.imageRegistry
+            value: "mirror.gcr.io"
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/catalog/apps/grafana/manifests
+      kustomize:
+        patches:
+          - target:
+              group: external-secrets.io
+              kind: ExternalSecret
+              name: grafana-admin
+            patch: |-
+              - op: add
+                path: /spec/secretStoreRef/name
+                value: "vault-lab"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-cert-manager-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: cert-manager
+  sources:
+    - repoURL: quay.io/jetstack/charts
+      chart: cert-manager
+      targetRevision: "v1.21.2"
+      helm:
+        releaseName: cert-manager
+        valueFiles:
+          - $layout/examples/catalog/apps/cert-manager/values/chart.yaml
+        parameters:
+          - name: image.registry
+            value: "quay.io"
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/catalog/apps/cert-manager/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-grafana-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: grafana
+  sources:
+    - repoURL: ghcr.io/grafana/helm-charts
+      chart: grafana
+      targetRevision: "10.5.15"
+      helm:
+        releaseName: grafana
+        valueFiles:
+          - $layout/examples/catalog/apps/grafana/values/chart.yaml
+          - $layout/examples/envs/staging/instances/grafana/values/chart.yaml
+        parameters:
+          - name: global.imageRegistry
+            value: "docker.io"
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/catalog/apps/grafana/manifests
+      kustomize:
+        patches:
+          - target:
+              group: external-secrets.io
+              kind: ExternalSecret
+              name: grafana-admin
+            patch: |-
+              - op: add
+                path: /spec/secretStoreRef/name
+                value: "vault-lab"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-traefik-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: traefik
+  sources:
+    - repoURL: ghcr.io/traefik/helm
+      chart: traefik
+      targetRevision: "41.6.0"
+      helm:
+        releaseName: traefik
+        valueFiles:
+          - $layout/examples/clusters/lab-1/apps/traefik/values/chart.yaml
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-whoami-lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: whoami
+  sources:
+    - repoURL: https://cowboysysop.github.io/charts
+      chart: whoami
+      targetRevision: "6.0.0"
+      helm:
+        releaseName: whoami
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true

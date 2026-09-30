@@ -1,7 +1,7 @@
 sources:
   chart:
     type: helm
-    repoURL: https://traefik.github.io
-    repository: charts
+    repoURL: ghcr.io
+    repository: traefik/helm
     chart: traefik
-    targetRevision: 37.1.2
+    targetRevision: 41.6.0

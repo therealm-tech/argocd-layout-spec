@@ -7,8 +7,9 @@ same pull request.
 
 ## Development setup
 
-The only tool needed is [pre-commit](https://pre-commit.com/), which installs
-the hooks' own dependencies:
+The tools needed are [pre-commit](https://pre-commit.com/), which installs
+most hooks' own dependencies, and [Helm](https://helm.sh/docs/intro/install/)
+4, which the `helm-lint` hook and the tests call:
 
 ```sh
 uv tool install pre-commit
@@ -20,8 +21,24 @@ pre-commit install
 
 ## Running the tests
 
-There is no test suite. The checks are the pre-commit hooks, which lint the
-specification's YAML and the example layout.
+```sh
+tests/render.sh
+```
+
+It renders the example chart for every cluster of [examples/](examples/) and
+compares the result with [examples/rendered/](examples/rendered/), then renders
+each broken layout under [tests/errors/](tests/errors/) and checks it fails
+with the message in its `expected-error` file.
+
+A change to the chart or to the example layout that changes its output
+regenerates the expected output, and the diff is reviewed with the change:
+
+```sh
+tests/render.sh --update
+```
+
+A new error the chart detects gets a directory under `tests/errors/`: the
+files of a minimal layout, plus `expected-error`.
 
 ## Pre-commit hooks
 
@@ -41,6 +58,9 @@ pre-commit run <hook-id> --all-files
 | `check-yaml` | YAML parses | fix the syntax |
 | `check-added-large-files`, `check-merge-conflict`, `detect-private-key` | accidental commits | remove the file or the marker |
 | `yamllint` | YAML style, per [.yamllint.yaml](.yamllint.yaml) | block style, no leading `---` |
+| `helm-docs-built` | [examples/README.md](examples/README.md) matches the chart's `values.yaml` | fixed automatically, re-stage |
+| `shellcheck` | shell scripts | fix the script |
+| `helm-lint` | the example chart | fix the chart |
 | `actionlint` | GitHub Actions workflows | fix the workflow |
 | `no-co-authors` | commit message has no `Co-Authored-By` / `Generated with` line | rewrite the message |
 
@@ -51,7 +71,7 @@ configuration in the same pull request and say why.
 
 | Workflow | Triggers on | What it does | Reproduce locally |
 | --- | --- | --- | --- |
-| [quality.yaml](.github/workflows/quality.yaml) | every pull request, push to `main` | `pre-commit run --all-files` | `pre-commit run --all-files` |
+| [quality.yaml](.github/workflows/quality.yaml) | every pull request, push to `main` | `pre-commit run --all-files`, `tests/render.sh` | `pre-commit run --all-files`, `tests/render.sh` |
 | [security.yaml](.github/workflows/security.yaml) | every pull request, push to `main`, daily, manual | `trivy fs` on the repository, fails on fixable `HIGH`/`CRITICAL`, reports to code scanning | `trivy fs .` |
 
 Both are required to merge. [Dependabot](.github/dependabot.yaml) keeps the

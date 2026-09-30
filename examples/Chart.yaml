@@ -1,0 +1,5 @@
+apiVersion: v2
+name: layout
+description: Renders the Argo CD Applications of one cluster from the layout around it.
+type: application
+version: 0.1.0

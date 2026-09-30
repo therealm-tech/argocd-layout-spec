@@ -9,6 +9,10 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        args:
+          - --allow-multiple-documents
+        # Go templates, not YAML, until Helm renders them.
+        exclude: ^examples/templates/
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: detect-private-key
@@ -21,14 +25,32 @@ repos:
         # ignored without this — the hook passes anyway.
         args:
           - --strict
+        # Go templates, and Helm's own multi-document output.
+        exclude: ^examples/(templates|rendered)/
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
       - id: actionlint
 
+  - repo: https://github.com/norwoodj/helm-docs
+    rev: v1.14.2
+    hooks:
+      - id: helm-docs-built
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
   - repo: local
     hooks:
+      - id: helm-lint
+        name: helm lint
+        entry: helm lint examples -f examples/values-lint.yaml
+        language: system
+        files: ^examples/
+        pass_filenames: false
       - id: no-co-authors
         name: no co-authors in commit message
         entry: '^\s*co-authored-by:|\bgenerated with\b'

@@ -1,0 +1,14 @@
+# -- (string) Name of the cluster to render, identical in Argo CD and in the layout.
+cluster: ~
+# -- Where the generated Applications read the layout from.
+layout:
+  # -- (string) Git URL of the repository holding the layout.
+  repoURL: ~
+  # -- (string) Revision of the layout the generated Applications track.
+  targetRevision: ~
+  # -- (string) Path of the layout root inside the repository.
+  path: ~
+# -- Argo CD project of the generated Applications.
+project: default
+# -- Namespace Argo CD reads Applications from.
+argocdNamespace: argocd

@@ -1,0 +1,7 @@
+sources:
+  chart:
+    type: helm
+    repoURL:
+      property: missingRegistry
+    chart: app
+    targetRevision: 1.0.0

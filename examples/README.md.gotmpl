@@ -1,0 +1,19 @@
+{{ template "chart.header" . }}
+{{ template "chart.description" . }}
+
+This directory is an example layout following [SPEC.md](../SPEC.md), and the
+Helm chart that wires it into Argo CD using native features only.
+
+- The catalog app [layout](catalog/apps/layout/) is an ApplicationSet creating
+  one Application per cluster registered in Argo CD, each rendering this chart
+  with the cluster's name. The `platform` environment installs it on `lab-1`,
+  the cluster running Argo CD, so the layout manages its own wiring.
+  Bootstrapping applies it once by hand:
+  `kubectl apply -k catalog/apps/layout/manifests`.
+- [templates/](templates/) reads the layout with `.Files`, merges the layers of
+  every instance placed on that cluster, and emits one Application per
+  instance. A layout error fails the render.
+- [rendered/](rendered/) holds the Applications the chart produces for each
+  example cluster; `tests/render.sh` checks it stays in sync.
+
+{{ template "chart.valuesSection" . }}

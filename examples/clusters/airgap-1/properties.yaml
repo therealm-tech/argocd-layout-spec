@@ -1,5 +1,6 @@
-quayCharts: oci://harbor.airgap.internal/quay.io
-ghcrCharts: oci://harbor.airgap.internal/ghcr.io
+quayCharts: harbor.airgap.internal/quay.io
+ghcrCharts: harbor.airgap.internal/ghcr.io
+rookCharts: https://harbor.airgap.internal/chartrepo/rook
 quayImages: harbor.airgap.internal/quay.io
 dockerImages: harbor.airgap.internal/docker.io
 secretStore: aws-secrets-manager

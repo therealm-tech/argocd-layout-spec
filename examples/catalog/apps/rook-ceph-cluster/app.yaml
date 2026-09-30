@@ -1,7 +1,8 @@
 sources:
   chart:
     type: helm
-    repoURL: https://charts.rook.io
+    repoURL:
+      property: rookCharts
     repository: release
     chart: rook-ceph-cluster
-    targetRevision: v1.20.7
+    targetRevision: v1.20.8

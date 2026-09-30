@@ -1,0 +1,5 @@
+sources:
+  chart:
+    type: helm
+    repoURL: example.com/charts
+    targetRevision: 1.0.0
