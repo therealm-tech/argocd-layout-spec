@@ -1,0 +1,9 @@
+apiVersion: v2
+name: catalog
+description: The catalog of the example layout, packaged for layouts that consume it from another repository.
+type: application
+version: 0.1.0
+sources:
+  - https://github.com/therealm-tech/argocd-layout-spec
+annotations:
+  layout/catalog-path: examples/catalog

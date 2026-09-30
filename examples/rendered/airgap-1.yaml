@@ -25,7 +25,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/rook-ceph-cluster/manifests
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/rook-ceph-cluster/manifests
   syncPolicy:
     retry:
       limit: 10
@@ -63,7 +66,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/rook-ceph-cluster/manifests
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/rook-ceph-cluster/manifests
   syncPolicy:
     retry:
       limit: 10
@@ -103,10 +109,11 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/cert-manager/manifests
+      path: examples/base
       kustomize:
         components:
-          - ../../../../clusters/airgap-1/overrides/cert-manager/manifests
+          - ../catalog/apps/cert-manager/manifests
+          - ../clusters/airgap-1/overrides/cert-manager/manifests
   syncPolicy:
     retry:
       limit: 10
@@ -148,10 +155,11 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/grafana/manifests
+      path: examples/base
       kustomize:
         components:
-          - ../../../../envs/prod/clusters/airgap-1/instances/grafana/manifests
+          - ../catalog/apps/grafana/manifests
+          - ../envs/prod/clusters/airgap-1/instances/grafana/manifests
         patches:
           - target:
               group: external-secrets.io

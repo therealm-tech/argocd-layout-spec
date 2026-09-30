@@ -25,17 +25,11 @@ pre-commit install
 tests/render.sh
 ```
 
-It renders the example chart for every cluster of [examples/](examples/) and
-compares the result with [examples/rendered/](examples/rendered/), then renders
-each broken layout under [tests/errors/](tests/errors/) and checks it fails
-with the message in its `expected-error` file.
-
-A change to the chart or to the example layout that changes its output
-regenerates the expected output, and the diff is reviewed with the change:
-
-```sh
-tests/render.sh --update
-```
+It renders each example layout, [examples/](examples/) and
+[examples-confidential/](examples-confidential/), for every one of its clusters
+into the layout's `rendered/` directory, which Git ignores, then renders each
+broken layout under [tests/errors/](tests/errors/) and checks it fails with the
+message in its `expected-error` file.
 
 A new error the chart detects gets a directory under `tests/errors/`: the
 files of a minimal layout, plus `expected-error`.
@@ -58,9 +52,9 @@ pre-commit run <hook-id> --all-files
 | `check-yaml` | YAML parses | fix the syntax |
 | `check-added-large-files`, `check-merge-conflict`, `detect-private-key` | accidental commits | remove the file or the marker |
 | `yamllint` | YAML style, per [.yamllint.yaml](.yamllint.yaml) | block style, no leading `---` |
-| `helm-docs-built` | [examples/README.md](examples/README.md) matches the chart's `values.yaml` | fixed automatically, re-stage |
+| `helm-docs-built` | each example layout's `README.md` matches its chart | fixed automatically, re-stage |
 | `shellcheck` | shell scripts | fix the script |
-| `helm-lint` | the example chart | fix the chart |
+| `helm-lint` | the example charts | fix the chart |
 | `actionlint` | GitHub Actions workflows | fix the workflow |
 | `no-co-authors` | commit message has no `Co-Authored-By` / `Generated with` line | rewrite the message |
 

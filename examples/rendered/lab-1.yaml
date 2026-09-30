@@ -14,8 +14,10 @@ spec:
   sources:
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/layout/manifests
+      path: examples/base
       kustomize:
+        components:
+          - ../catalog/apps/layout/manifests
         patches:
           - target:
               group: argoproj.io
@@ -78,7 +80,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/rook-ceph-cluster/manifests
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/rook-ceph-cluster/manifests
   syncPolicy:
     retry:
       limit: 10
@@ -118,7 +123,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/cert-manager/manifests
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/cert-manager/manifests
   syncPolicy:
     retry:
       limit: 10
@@ -159,8 +167,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/grafana/manifests
+      path: examples/base
       kustomize:
+        components:
+          - ../catalog/apps/grafana/manifests
         patches:
           - target:
               group: external-secrets.io
@@ -209,7 +219,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/cert-manager/manifests
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/cert-manager/manifests
   syncPolicy:
     retry:
       limit: 10
@@ -250,8 +263,10 @@ spec:
       ref: layout
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
-      path: examples/catalog/apps/grafana/manifests
+      path: examples/base
       kustomize:
+        components:
+          - ../catalog/apps/grafana/manifests
         patches:
           - target:
               group: external-secrets.io

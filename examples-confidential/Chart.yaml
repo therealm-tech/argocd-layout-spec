@@ -1,0 +1,9 @@
+apiVersion: v2
+name: layout
+description: Renders the Argo CD Applications of one cluster from a layout whose catalog lives in another repository.
+type: application
+version: 0.1.0
+dependencies:
+  - name: catalog
+    version: 0.1.0
+    repository: file://../examples/catalog

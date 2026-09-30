@@ -1,0 +1,6 @@
+dependencies:
+- name: catalog
+  repository: file://../examples/catalog
+  version: 0.1.0
+digest: sha256:d99df4d8adbe617903061b560c88fd8b1847cd5c01c4e78cb76829fcf2369752
+generated: "2026-09-30T17:56:11.24192+02:00"

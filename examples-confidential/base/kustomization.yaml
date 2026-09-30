@@ -1,0 +1,4 @@
+# Empty base every generated Application stacks its manifest layers on, as
+# Kustomize components.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization

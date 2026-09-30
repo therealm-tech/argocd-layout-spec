@@ -24,9 +24,11 @@ None: the specification is Markdown and YAML.
 ### Usage
 
 1. Read [SPEC.md](SPEC.md).
-2. Browse [examples/](examples/), a layout with a catalog, a connected cluster,
-   an air-gapped cluster and two environments, wired into Argo CD by a Helm
-   chart. Its values are illustrative.
+2. Read [examples/README.md](examples/README.md). It walks through
+   [examples/](examples/), a layout with a catalog, two clusters and three
+   environments wired into Argo CD by a Helm chart, and points to
+   [examples-confidential/](examples-confidential/), a layout consuming that
+   catalog from another repository. Their values are illustrative.
 3. Lay out a GitOps repository after them, then write the Argo CD wiring that
    reads it.
 

@@ -72,9 +72,12 @@ manifests/
 
 1. Every file and directory above is OPTIONAL, except `env.yaml` in an
    environment.
-2. A layout lives in a single repository, under one root directory. The
-   specification governs `catalog/`, `clusters/` and `envs/` only; the root
-   MAY hold anything else, such as the wiring.
+2. `clusters/` and `envs/` live in one repository, under one root directory.
+   `catalog/` lives either under the same root or in a repository of its own,
+   where it MAY be any directory. A layout consumes a separate catalog at a
+   single revision: its files, values files and manifests all come from it.
+   The specification governs `properties.yaml`, `apps/`, `clusters/` and
+   `envs/` only; the roots MAY hold anything else, such as the wiring.
 3. Environment, cluster, app, instance and source names MUST be
    [RFC 1123 labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names).
 4. A cluster is declared by being listed in an `env.yaml`. An instance is
@@ -187,9 +190,10 @@ configuration of the lower layers still applies to the new origin.
 
 ## 8. Manifests
 
-1. `manifests/` is a Kustomize directory. In the lowest layer of the instance
-   that has one, it is a `Kustomization`; in every higher layer it is a
-   `Component`. The components are stacked on the base in layer order.
+1. `manifests/` is a Kustomize `Component`, in every layer. The wiring stacks
+   the components of an instance's layers, in layer order, on an empty base.
+   A component in a separate catalog is fetched from the catalog's repository;
+   the others MUST be in the same repository as the base.
 2. `kustomization.yaml` lists the files of `resources/` and `patches/`, all of
    them, and nothing else. It uses no other field: `namespace`, `namePrefix`,
    `images`, generators and the like change resource identities and are not
@@ -312,8 +316,8 @@ The layout does not support:
 
 This section is informative. A layout can be assembled by Argo CD alone:
 
-1. The layout root is a Helm chart: a `Chart.yaml` and a `templates/`
-   directory next to `catalog/`, `clusters/` and `envs/`.
+1. The layout root is a Helm chart: a `Chart.yaml`, a `templates/` directory
+   and an empty Kustomize base, next to `clusters/` and `envs/`.
 2. One Application per cluster renders that chart, with the cluster name as a
    parameter.
 3. The chart reads the layout with `.Files`: it selects the environments
@@ -321,9 +325,17 @@ This section is informative. A layout can be assembled by Argo CD alone:
    file reads as empty), merges `app.yaml` and the properties, and fails the
    render on any error of §11 it can detect.
 4. It emits one Application per instance and placement: the merged sources,
-   the values files of every layer through a `ref` source, the Helm
-   parameters, Jsonnet variables and Kustomize patches of the mapping, and the
-   manifests as a base with its components.
+   the values files of every layer through `ref` sources, the Helm parameters,
+   Jsonnet variables and Kustomize patches of the mapping, and the manifest
+   components of every layer on the empty base.
+5. A separate catalog is a Helm chart too, published at a version and tagged
+   with it in Git. The layout chart declares it as a dependency and reads its
+   files through `.Subcharts`; the generated Applications fetch its values
+   files through a `ref` source and its manifests as remote Kustomize
+   components, both at the tag of that version. Upgrading the catalog is
+   bumping the dependency.
 
 Everything is rendered by Helm and Kustomize; no plugin is involved.
-[examples/](examples/) implements this wiring.
+[examples/](examples/) implements this wiring with its catalog alongside, and
+[examples-confidential/](examples-confidential/) with the catalog of
+[examples/](examples/) consumed as a dependency.

@@ -19,16 +19,57 @@ return strings, hence the mutation.
 {{- end -}}
 {{- end -}}
 
+{{/*
+Where the catalog comes from, as JSON: the `catalog` chart dependency when
+there is one, the catalog/ directory otherwise. A catalog dependency names its
+Git repository in `sources`, its directory there in the `layout/catalog-path`
+annotation (the root by default), and is tagged v<chart version>.
+*/}}
+{{- define "layout.catalog" -}}
+{{- $subcharts := .Subcharts | default (dict) -}}
+{{- if hasKey $subcharts "catalog" -}}
+{{- $chart := (index $subcharts "catalog").Chart -}}
+{{- if not $chart.Sources -}}
+{{- fail "the catalog chart must name its Git repository in `sources`" -}}
+{{- end -}}
+{{- $path := index ($chart.Annotations | default (dict)) "layout/catalog-path" | default "" | trimSuffix "/" -}}
+{{- dict "remote" true "repoURL" (first $chart.Sources) "path" $path "revision" (printf "v%s" $chart.Version) | toJson -}}
+{{- else -}}
+{{- dict "remote" false | toJson -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The content of layout file .path, empty when it does not exist. */}}
+{{- define "layout.read" -}}
+{{- if and .catalog.remote (hasPrefix "catalog/" .path) -}}
+{{- (index .root.Subcharts "catalog").Files.Get (trimPrefix "catalog/" .path) -}}
+{{- else -}}
+{{- .root.Files.Get .path -}}
+{{- end -}}
+{{- end -}}
+
+{{/* "true" when layout directory .path holds any file, empty otherwise. */}}
+{{- define "layout.exists" -}}
+{{- $files := .root.Files -}}
+{{- $path := .path -}}
+{{- if and .catalog.remote (hasPrefix "catalog/" .path) -}}
+{{- $files = (index .root.Subcharts "catalog").Files -}}
+{{- $path = trimPrefix "catalog/" .path -}}
+{{- end -}}
+{{- if gt (len ($files.Glob (printf "%s/**" $path))) 0 -}}
+true
+{{- end -}}
+{{- end -}}
+
 {{/* Merges every existing file of .paths, in order, into .dst. */}}
 {{- define "layout.mergeFiles" -}}
-{{- $root := .root -}}
-{{- $dst := .dst -}}
+{{- $ctx := . -}}
 {{- range $path := .paths -}}
-{{- $content := $root.Files.Get $path | fromYaml -}}
+{{- $content := include "layout.read" (dict "root" $ctx.root "catalog" $ctx.catalog "path" $path) | fromYaml -}}
 {{- if hasKey $content "Error" -}}
 {{- fail (printf "%s: %s" $path $content.Error) -}}
 {{- end -}}
-{{- include "layout.merge" (dict "dst" $dst "src" $content) -}}
+{{- include "layout.merge" (dict "dst" $ctx.dst "src" $content) -}}
 {{- end -}}
 {{- end -}}
 
@@ -82,5 +123,36 @@ resource, one `add` per pointer.
 {{- .path -}}
 {{- else -}}
 {{- printf "%s/%s" (trimSuffix "/" $base) .path -}}
+{{- end -}}
+{{- end -}}
+
+{{/* A values file as the Application reaches it, through its `ref` source. */}}
+{{- define "layout.valuesRef" -}}
+{{- if and .catalog.remote (hasPrefix "catalog/" .path) -}}
+{{- printf "$catalog/%s" (include "layout.catalogPath" (dict "catalog" .catalog "path" .path)) -}}
+{{- else -}}
+{{- printf "$layout/%s" (include "layout.repoPath" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The manifests of layer .layer as a Kustomize component of base/: a path
+relative to it, or a remote URL for a catalog in its own repository.
+*/}}
+{{- define "layout.component" -}}
+{{- if and .catalog.remote (hasPrefix "catalog/" .layer) -}}
+{{- printf "%s//%s/manifests?ref=%s" .catalog.repoURL (include "layout.catalogPath" (dict "catalog" .catalog "path" .layer)) .catalog.revision -}}
+{{- else -}}
+{{- printf "../%s/manifests" .layer -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The path of catalog file .path in the catalog's own repository. */}}
+{{- define "layout.catalogPath" -}}
+{{- $rel := trimPrefix "catalog/" .path -}}
+{{- if .catalog.path -}}
+{{- printf "%s/%s" .catalog.path $rel -}}
+{{- else -}}
+{{- $rel -}}
 {{- end -}}
 {{- end -}}

@@ -2,10 +2,12 @@
 {{- $cluster := required "cluster is required" .Values.cluster -}}
 {{- $repoURL := required "layout.repoURL is required" .Values.layout.repoURL -}}
 {{- $revision := required "layout.targetRevision is required" .Values.layout.targetRevision -}}
+{{- $catalog := include "layout.catalog" . | fromJson -}}
+{{- $io := dict "root" $root "catalog" $catalog -}}
 {{- range $envFile, $_ := .Files.Glob "envs/*/env.yaml" }}
 {{- $env := base (dir $envFile) -}}
 {{- $envDef := dict -}}
-{{- include "layout.mergeFiles" (dict "root" $root "dst" $envDef "paths" (list $envFile)) -}}
+{{- include "layout.mergeFiles" (merge (dict "dst" $envDef "paths" (list $envFile)) $io) -}}
 {{- $clusters := $envDef.clusters | default (dict) -}}
 {{- if hasKey $clusters $cluster }}
 {{- $disabled := (index $clusters $cluster | default (dict)).disabled | default (list) -}}
@@ -16,11 +18,11 @@
 {{- end -}}
 
 {{- $props := dict -}}
-{{- include "layout.mergeFiles" (dict "root" $root "dst" $props "paths" (list
+{{- include "layout.mergeFiles" (merge (dict "dst" $props "paths" (list
       "catalog/properties.yaml"
       (printf "envs/%s/properties.yaml" $env)
       (printf "clusters/%s/properties.yaml" $cluster)
-      (printf "envs/%s/clusters/%s/properties.yaml" $env $cluster))) -}}
+      (printf "envs/%s/clusters/%s/properties.yaml" $env $cluster))) $io) -}}
 
 {{- range $instance, $decl := $envDef.instances }}
 {{- if not (has $instance $disabled) }}
@@ -43,8 +45,8 @@
 {{- $app := $decl.app | default $instance -}}
 {{- $clusterApp := printf "clusters/%s/apps/%s" $cluster $app -}}
 {{- $catalogApp := printf "catalog/apps/%s" $app -}}
-{{- $isClusterApp := gt (len ($root.Files.Glob (printf "%s/**" $clusterApp))) 0 -}}
-{{- $isCatalogApp := gt (len ($root.Files.Glob (printf "%s/**" $catalogApp))) 0 -}}
+{{- $isClusterApp := include "layout.exists" (merge (dict "path" $clusterApp) $io) -}}
+{{- $isCatalogApp := include "layout.exists" (merge (dict "path" $catalogApp) $io) -}}
 {{- if and $isClusterApp $isCatalogApp -}}
 {{- fail (printf "%s: cluster app %q shadows a catalog app" $context $app) -}}
 {{- else if $isClusterApp -}}
@@ -62,18 +64,18 @@
 {{- range $layer := $layers -}}
 {{- $appFiles = append $appFiles (printf "%s/app.yaml" $layer) -}}
 {{- end -}}
-{{- include "layout.mergeFiles" (dict "root" $root "dst" $spec "paths" $appFiles) -}}
+{{- include "layout.mergeFiles" (merge (dict "dst" $spec "paths" $appFiles) $io) -}}
 {{- $sources := $spec.sources | default (dict) -}}
 {{- $manifestLayers := list -}}
 {{- range $layer := $layers -}}
-{{- if $root.Files.Get (printf "%s/manifests/kustomization.yaml" $layer) -}}
+{{- if include "layout.read" (merge (dict "path" (printf "%s/manifests/kustomization.yaml" $layer)) $io) -}}
 {{- $manifestLayers = append $manifestLayers $layer -}}
 {{- end -}}
 {{- end -}}
 {{- if and (not $sources) (not $manifestLayers) -}}
 {{- fail (printf "%s: no source and no manifests" $context) -}}
 {{- end -}}
-{{- $hasValueFiles := false }}
+{{- $refs := dict }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -119,12 +121,13 @@ spec:
         {{- $valueFiles := list -}}
         {{- range $layer := $layers -}}
         {{- $file := printf "%s/values/%s.yaml" $layer $name -}}
-        {{- if $root.Files.Get $file -}}
-        {{- $valueFiles = append $valueFiles (printf "$layout/%s" (include "layout.repoPath" (dict "root" $root "path" $file))) -}}
+        {{- if include "layout.read" (merge (dict "path" $file) $io) -}}
+        {{- $ref := include "layout.valuesRef" (merge (dict "path" $file) $io) -}}
+        {{- $_ := set $refs (regexFind "^\\$[a-z]+" $ref | trimPrefix "$") true -}}
+        {{- $valueFiles = append $valueFiles $ref -}}
         {{- end -}}
         {{- end }}
         {{- if $valueFiles }}
-        {{- $hasValueFiles = true }}
         valueFiles:
           {{- toYaml $valueFiles | nindent 10 }}
         {{- end }}
@@ -163,42 +166,41 @@ spec:
       {{- fail (printf "%s: unknown type %q" $sourceContext $source.type) }}
       {{- end }}
     {{- end }}
-    {{- if $hasValueFiles }}
+    {{- if hasKey $refs "layout" }}
     - repoURL: {{ $repoURL }}
       targetRevision: {{ $revision | quote }}
       ref: layout
     {{- end }}
+    {{- if hasKey $refs "catalog" }}
+    - repoURL: {{ $catalog.repoURL }}
+      targetRevision: {{ $catalog.revision | quote }}
+      ref: catalog
+    {{- end }}
     {{- if $manifestLayers }}
-    {{- $base := printf "%s/manifests" (first $manifestLayers) }}
-    {{- $up := repeat (len (splitList "/" $base)) "../" }}
+    {{- $manifestMapping := ($spec.manifests | default (dict)).properties | default (dict) }}
+    {{- range $identity, $_ := $manifestMapping }}
+    {{- $found := false }}
+    {{- range $layer := $manifestLayers }}
+    {{- if include "layout.read" (merge (dict "path" (printf "%s/manifests/resources/%s.yaml" $layer $identity)) $io) }}
+    {{- $found = true }}
+    {{- end }}
+    {{- end }}
+    {{- if not $found }}
+    {{- fail (printf "%s: manifests.properties targets %q, which no layer defines" $context $identity) }}
+    {{- end }}
+    {{- end }}
     - repoURL: {{ $repoURL }}
       targetRevision: {{ $revision | quote }}
-      path: {{ include "layout.repoPath" (dict "root" $root "path" $base) }}
-      {{- $manifestMapping := ($spec.manifests | default (dict)).properties | default (dict) }}
-      {{- if or (gt (len $manifestLayers) 1) $manifestMapping }}
+      path: {{ include "layout.repoPath" (dict "root" $root "path" "base") }}
       kustomize:
-        {{- if gt (len $manifestLayers) 1 }}
         components:
-          {{- range $layer := rest $manifestLayers }}
-          - {{ printf "%s%s/manifests" $up $layer }}
+          {{- range $layer := $manifestLayers }}
+          - {{ include "layout.component" (merge (dict "layer" $layer) $io) }}
           {{- end }}
-        {{- end }}
-        {{- range $identity, $_ := $manifestMapping }}
-        {{- $found := false }}
-        {{- range $layer := $manifestLayers }}
-        {{- if $root.Files.Get (printf "%s/manifests/resources/%s.yaml" $layer $identity) }}
-        {{- $found = true }}
-        {{- end }}
-        {{- end }}
-        {{- if not $found }}
-        {{- fail (printf "%s: manifests.properties targets %q, which no layer defines" $context $identity) }}
-        {{- end }}
-        {{- end }}
         {{- if $manifestMapping }}
         patches:
           {{- include "layout.patches" (dict "mapping" $manifestMapping "props" $props "context" $context) | trim | nindent 10 }}
         {{- end }}
-      {{- end }}
     {{- end }}
   syncPolicy:
     retry:
