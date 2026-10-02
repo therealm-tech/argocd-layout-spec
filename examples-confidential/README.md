@@ -29,16 +29,18 @@ flowchart LR
 ```
 
 - **The catalog is a Helm dependency**, declared in [Chart.yaml](Chart.yaml)
-  and pinned to a version. Upgrading the catalog is changing that version;
-  nothing else in this repository mentions it. Here the dependency points at
-  [examples/catalog/](../examples/catalog/) through a `file://` path, so the
-  example works from one checkout; a real private repository points at the
-  registry the catalog is published to.
+  under the name `catalog` and pinned to a version. Upgrading the catalog is
+  changing that version, then running `helm dependency update` to refresh
+  [Chart.lock](Chart.lock), which records the exact package. Here the
+  dependency points at [examples/catalog/](../examples/catalog/) through a
+  `file://` path, so the example works from one checkout; a real private
+  repository points at the registry the catalog is published to.
 - **This repository holds only its environments and clusters**:
-  [envs/platform/](envs/platform/) runs cert-manager and the layout's
-  ApplicationSet on `aws-1`, [envs/acme/](envs/acme/) runs Grafana there, and
-  [clusters/aws-1/](clusters/aws-1/) adapts them to AWS — its own secret store,
-  its own ingress class.
+  [envs/platform/](envs/platform/) runs cert-manager, external-secrets and the
+  layout's ApplicationSet on `aws-1`, [envs/acme/](envs/acme/) runs Grafana
+  there, and [clusters/aws-1/](clusters/aws-1/) adapts them to AWS: its
+  secret store is AWS Secrets Manager instead of the catalog's Vault, and its
+  ingress class is the AWS load balancer's.
 - **The wiring is the same chart** as in [examples/](../examples/), shared
   through symbolic links. A real private repository would copy
   [templates/](templates/), or take them from a Helm library chart whose
@@ -50,7 +52,10 @@ flowchart LR
 The chart reads the catalog's files from the dependency, but Argo CD still
 needs the catalog's values files and manifests when it renders each
 Application. It fetches them from the catalog's Git repository, at the tag
-matching the dependency's version, `v0.1.0`. `platform.cert-manager.aws-1` in
+matching the dependency's version, `v0.1.0`. The chart learns where that
+repository is from the catalog's own
+[Chart.yaml](../examples/catalog/Chart.yaml): `sources` names the repository,
+and the `layout/catalog-path` annotation the catalog's directory in it. `platform.cert-manager.aws-1` in
 [rendered/aws-1.yaml](rendered/aws-1.yaml) shows it:
 
 - its values file comes from `$catalog/…`, a second Git source at `v0.1.0`;
@@ -60,7 +65,9 @@ matching the dependency's version, `v0.1.0`. `platform.cert-manager.aws-1` in
   from this repository.
 
 Argo CD must therefore reach the catalog's registry and its Git repository.
-The tag `v0.1.0` is illustrative here: this repository has no such tag.
+The tag `v0.1.0` is illustrative here: this repository has no such tag, so
+these Applications show what a real, tagged catalog produces, but would not
+render as they are.
 
 ## Bootstrapping
 
@@ -81,10 +88,14 @@ argocd app sync platform.layout.aws-1
 ```
 
 The ApplicationSet it deploys comes from the catalog, and points at this
-layout thanks to the `layoutPath` property of
-[envs/platform/properties.yaml](envs/platform/properties.yaml).
+layout thanks to the `layoutRepoURL` and `layoutPath` properties of
+[envs/platform/properties.yaml](envs/platform/properties.yaml). Then sync
+`layout-aws-1` and the instances, as in [examples/](../examples/README.md#bootstrapping).
 
-## Values
+## Chart values
+
+The ApplicationSet sets these for each `layout-<cluster>`; you only set them
+yourself when bootstrapping.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

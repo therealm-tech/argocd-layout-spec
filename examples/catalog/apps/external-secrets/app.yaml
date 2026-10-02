@@ -1,0 +1,14 @@
+namespace: external-secrets
+sources:
+  chart:
+    type: helm
+    repoURL:
+      property: ghcrCharts
+    repository: external-secrets/charts
+    chart: external-secrets
+    targetRevision: "2.11.0"
+    releaseName: external-secrets
+manifests:
+  properties:
+    external-secrets.io/ClusterSecretStore/vault:
+      /spec/provider/vault/server: vaultURL

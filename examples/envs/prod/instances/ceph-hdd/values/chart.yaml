@@ -1,4 +1,7 @@
 cephClusterSpec:
+  # Rook keeps each cluster's state under this host path: two clusters on one
+  # Kubernetes cluster need two paths.
+  dataDirHostPath: /var/lib/rook-ceph-hdd
   storage:
     deviceFilter: sd[a-d]
 cephBlockPools:

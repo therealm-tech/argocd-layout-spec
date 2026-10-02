@@ -1,0 +1,3 @@
+manifests:
+  properties:
+    external-secrets.io/ClusterSecretStore/vault: null

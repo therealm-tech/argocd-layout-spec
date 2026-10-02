@@ -4,6 +4,7 @@ rookCharts: https://charts.rook.io
 quayImages: quay.io
 dockerImages: docker.io
 secretStore: vault
+vaultURL: https://vault.example.com
 layoutRepoURL: https://github.com/therealm-tech/argocd-layout-spec
 layoutRevision: HEAD
 layoutPath: examples

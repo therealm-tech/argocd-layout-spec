@@ -1,3 +1,4 @@
+namespace: argocd
 manifests:
   properties:
     argoproj.io/ApplicationSet/layout_argocd:

@@ -1,8 +1,11 @@
+namespace: shared
 sources:
   chart:
     targetRevision: "2.0.0"
+    releaseName: trimmed
     properties:
       debug: null
+  addon: null
   overlay: null
   library: null
 manifests:

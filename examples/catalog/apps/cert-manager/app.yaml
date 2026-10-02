@@ -1,3 +1,4 @@
+namespace: cert-manager
 sources:
   chart:
     type: helm
@@ -5,6 +6,7 @@ sources:
       property: quayCharts
     repository: jetstack/charts
     chart: cert-manager
+    releaseName: cert-manager
     targetRevision: v1.21.2
     properties:
       image.registry: quayImages

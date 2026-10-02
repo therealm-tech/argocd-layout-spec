@@ -28,6 +28,11 @@ sources:
         api: apiURL
       tlas:
         debug: debug
+  addon:
+    type: helm
+    repoURL: registry.example.com/charts
+    chart: addon
+    targetRevision: "0.3.0"
   raw:
     type: directory
     repoURL: https://git.example.com/raw

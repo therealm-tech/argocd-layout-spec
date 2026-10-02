@@ -102,6 +102,9 @@ true
 
 {{/* Fails the render when property .name is undefined (SPEC §9.2.3). */}}
 {{- define "layout.requireProperty" -}}
+{{- if not (kindIs "string" .name) -}}
+{{- fail (printf "%s: %v is not a property name; quote it, YAML reads it as a %s" .context .name (kindOf .name)) -}}
+{{- end -}}
 {{- if not (hasKey .props .name) -}}
 {{- fail (printf "%s: undefined property %q" .context .name) -}}
 {{- end -}}
@@ -164,6 +167,15 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- range $file := $listed -}}
 {{- if not (has $file $files) -}}
 {{- fail (printf "%s: lists %s, which does not exist" $kustomization $file) -}}
+{{- end -}}
+{{- $documents := 0 -}}
+{{- range $document := regexSplit "(?m)^---[ \t]*$" (include "layout.read" (merge (dict "path" $file) $io)) -1 -}}
+{{- if regexMatch "(?m)^[^#\\s]" $document -}}
+{{- $documents = add1 $documents -}}
+{{- end -}}
+{{- end -}}
+{{- if ne $documents 1 -}}
+{{- fail (printf "%s: holds %d resources instead of one (SPEC §8.3)" $file $documents) -}}
 {{- end -}}
 {{- $obj := include "layout.parse" (merge (dict "path" $file) $io) | fromJson -}}
 {{- $identity := include "layout.identity" (dict "obj" $obj "context" $file) -}}
@@ -257,5 +269,29 @@ relative to it, or a remote URL for a catalog in its own repository.
 {{- printf "%s//%s/manifests?ref=%s" .catalog.repoURL (include "layout.catalogPath" (dict "catalog" .catalog "path" .layer)) .catalog.revision -}}
 {{- else -}}
 {{- printf "../%s/manifests" .layer -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Checks the files of app directory .layer: an app.yaml, values files and a
+manifests directory, nothing else (SPEC §3.5, §8). Returns, as JSON, whether
+it has manifests.
+*/}}
+{{- define "layout.checkAppDirectory" -}}
+{{- $io := dict "root" .root "catalog" .catalog -}}
+{{- $layer := .layer -}}
+{{- $hasManifests := include "layout.read" (merge (dict "path" (printf "%s/manifests/kustomization.yaml" $layer)) $io) -}}
+{{- range $file := include "layout.glob" (merge (dict "path" $layer) $io) | fromJsonArray -}}
+{{- $rel := trimPrefix (printf "%s/" $layer) $file -}}
+{{- if hasPrefix "manifests/" $rel -}}
+{{- if not $hasManifests -}}
+{{- fail (printf "%s: %s/manifests/ has no kustomization.yaml (SPEC §8.1)" $file $layer) -}}
+{{- end -}}
+{{- else if not (or (eq $rel "app.yaml") (regexMatch "^values/[^/]+\\.yaml$" $rel)) -}}
+{{- fail (printf "%s: matches nothing the layout defines (SPEC §3.5)" $file) -}}
+{{- end -}}
+{{- end -}}
+{{- if $hasManifests -}}
+{{- $_ := include "layout.manifests" (merge (dict "layer" $layer) $io) -}}
 {{- end -}}
 {{- end -}}

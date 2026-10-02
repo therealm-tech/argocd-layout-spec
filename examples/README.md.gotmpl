@@ -4,7 +4,29 @@
 This directory is a complete layout following [SPEC.md](../SPEC.md): a
 catalog, two clusters and three environments, plus the small Helm chart that
 turns it into Argo CD Applications. This page walks through how the pieces fit,
-assuming little prior knowledge of Argo CD.
+assuming you know Kubernetes and Helm but little of Argo CD.
+
+## Words used on this page
+
+- An **environment** (`envs/<env>/`) is a set of applications deployed
+  together: `platform`, `staging`, `prod`. It runs on one or more clusters.
+- A **cluster** (`clusters/<cluster>/`) is a Kubernetes cluster: `lab-1`, and
+  `airgap-1`, which has no Internet access.
+- A **placement** is an environment on one of its clusters, such as `prod` on
+  `airgap-1`. It is what actually gets deployed.
+- An **app** is something installable: Grafana, cert-manager. The
+  **catalog** (`catalog/apps/`) holds the apps any environment can install; a
+  cluster can also define apps of its own (`clusters/<cluster>/apps/`).
+- An **instance** is an app installed in an environment, under a name. Most
+  instances are named after their app; `ceph-hdd` and `ceph-ssd` are two
+  instances of the app `rook-ceph-cluster`.
+- A **source** is one thing an app deploys, usually a Helm chart, named in the
+  app's `app.yaml`.
+- A **layer** is one level of configuration of an instance: the app's
+  default, then the environment's, the cluster's and the placement's changes.
+- A **property** is a named value, such as a registry address, set for the
+  whole catalog, an environment or a cluster, and injected into the apps that
+  ask for it.
 
 ## Argo CD in a nutshell
 
@@ -14,7 +36,9 @@ line with what a Git repository describes. Three of its objects matter here:
 - An **Application** says *what* to deploy and *where*: one or more sources (a
   Helm chart, a directory of manifests in Git) and a destination (a cluster and
   a namespace). Argo CD renders the sources, compares the result with the
-  cluster, and applies it when you **sync** the Application.
+  cluster, and applies it when you **sync** the Application. A source can also
+  just lend its files to the others: the Applications here read their Helm
+  values files from this repository that way.
 - An Application can deploy anything, including **other Applications**. An
   Application whose sources render Application manifests is often called an
   *app of apps*: syncing it creates or updates the Applications it describes.
@@ -23,6 +47,64 @@ line with what a Git repository describes. Three of its objects matter here:
 
 Nothing in this example syncs on its own: every Application shows what would
 change, and applies it when someone syncs it.
+
+## Anatomy of an app directory
+
+Every layer of every instance is a directory of the same shape. Here is the
+default layer of Grafana, in the catalog:
+
+```
+catalog/apps/grafana/
+├── app.yaml                     what the app deploys: its sources, their
+│                                versions, and which properties go where
+├── values/
+│   └── chart.yaml               Helm values of the source named `chart`
+│                                in app.yaml (the file is named after it)
+└── manifests/                   extra Kubernetes objects, as a Kustomize
+    │                            Component (a reusable piece of Kustomize)
+    ├── kustomization.yaml       lists every file below
+    └── resources/
+        └── external-secrets.io/          the object's API group
+            └── ExternalSecret/           its kind
+                └── grafana-admin.yaml    its name
+```
+
+Files under `manifests/` are named after the object they hold, so the path is
+enough to find one:
+
+- objects of the core API (`apiVersion: v1`: ConfigMap, Secret…) use `core`
+  as their group, as in
+  [core/ConfigMap/grafana-airgap.yaml](envs/prod/clusters/airgap-1/instances/grafana/manifests/resources/core/ConfigMap/grafana-airgap.yaml);
+- an object that sets its own namespace gets it after an underscore, as the
+  ApplicationSet
+  [ApplicationSet/layout_argocd.yaml](catalog/apps/layout/manifests/resources/argoproj.io/ApplicationSet/layout_argocd.yaml),
+  which lives in `argocd`;
+- `resources/` adds objects, and `patches/` changes the objects of the layers
+  below. A patch holding `$patch: delete` removes one, as
+  [the letsencrypt issuer on airgap-1](clusters/airgap-1/overrides/cert-manager/manifests/patches/cert-manager.io/ClusterIssuer/letsencrypt.yaml),
+  which cannot reach Let's Encrypt.
+
+Each layer of an instance has its own directory, and any of them may be
+missing:
+
+| Layer | Directory | Applies to |
+| --- | --- | --- |
+| default | `catalog/apps/<app>/`, or `clusters/<cluster>/apps/<app>/` for a cluster's own app | every instance of the app |
+| environment | `envs/<env>/instances/<instance>/` | the instance, on every cluster of its environment |
+| cluster | `clusters/<cluster>/overrides/<app>/` | every instance of a catalog app on that cluster |
+| placement | `envs/<env>/clusters/<cluster>/instances/<instance>/` | the instance, on that cluster only |
+
+Higher layers win: the cluster overrides the environment, and the placement
+overrides everything. Each environment lists its instances in its `env.yaml`,
+for instance [envs/prod/env.yaml](envs/prod/env.yaml):
+
+- an instance with no field is the app of the same name;
+- `app: <app>` installs an app under another name, which is how one app is
+  installed twice;
+- `local: true` marks an app that exists only in this environment, defined
+  entirely in its `instances/<instance>/` directory, like `whoami` in
+  [envs/staging/env.yaml](envs/staging/env.yaml);
+- `disabled:` under a cluster skips instances on that cluster.
 
 ## How the pieces fit
 
@@ -50,14 +132,14 @@ flowchart TB
    own wiring (the dotted arrow).
 2. Each **`layout-<cluster>`** renders this chart for its cluster. The chart
    reads `envs/*/env.yaml`, keeps the environments placed on that cluster, and
-   for each of their instances merges the configuration layers.
+   for each of their instances merges the layers.
 3. The chart emits one **Application per instance**, named
-   `<env>.<instance>.<cluster>`. Syncing it deploys the instance into the
-   namespace `<env>-<instance>`: its chart with the merged values, and its
-   manifests with the patches of every layer.
+   `<env>.<instance>.<cluster>`. Syncing it deploys the instance into its
+   namespace — the one its `app.yaml` names, `<env>-<instance>` otherwise.
 
 The environments split the work. `platform` holds what a cluster needs once,
-whoever uses it: cert-manager and its CRDs, the Traefik ingress controller,
+whoever uses it: cert-manager, external-secrets and the Rook operator, which
+install the CRDs the other apps rely on, the Traefik ingress controller, and
 the layout's own ApplicationSet. `staging` and `prod` hold the applications,
 and can both run Grafana on `lab-1` because each instance gets its own
 namespace and Helm release name.
@@ -65,22 +147,23 @@ namespace and Helm release name.
 [templates/](templates/) is the whole chart. When it finds a mistake, the
 render of `layout-<cluster>` fails with a message naming the file and the rule
 of [SPEC.md](../SPEC.md), so the error shows in Argo CD before anything is
-applied. It checks names, orphan files and directories, how each instance
-resolves, the sources, the values files, every manifests directory, the
-properties and their mappings, and that no two instances on a cluster share a
-namespace. What it cannot see — the resources a chart renders — surfaces when
-the instance's own Application renders.
+applied. It checks names, files that match nothing, how each instance
+resolves, the sources, the values files, every `manifests/` directory, the
+properties, and that no two instances install the same Helm release in the
+same namespace. What it cannot see surfaces when the instance's own
+Application renders or syncs: the objects a chart renders, and two apps
+installing the same cluster-wide object — which is why such apps go in
+`platform`, once per cluster.
 
 ## Following one instance
 
 Take Grafana in the `prod` environment on the air-gapped cluster `airgap-1`.
 
 **It is declared.** [envs/prod/env.yaml](envs/prod/env.yaml) places `prod` on
-`lab-1` and `airgap-1` and lists `grafana` among its instances. With no `app:`
-field, the instance is the catalog app of the same name.
+`lab-1` and `airgap-1` and lists `grafana` among its instances, with no
+field: it is the catalog app of the same name.
 
-**Its layers are found**, from the most generic to the most specific; any of
-them may be missing:
+**Its layers are found:**
 
 | Layer | Directory | What it adds here |
 | --- | --- | --- |
@@ -89,31 +172,37 @@ them may be missing:
 | cluster | `clusters/airgap-1/overrides/grafana/` | nothing: the directory does not exist |
 | placement | [envs/prod/clusters/airgap-1/instances/grafana/](envs/prod/clusters/airgap-1/instances/grafana/) | a `ConfigMap` and values for `prod` on `airgap-1` only |
 
-**Its properties are resolved**, in the same order: the catalog's defaults,
-then `prod`'s, then `airgap-1`'s, then the placement's. `prod` points
-container images at a public mirror, but `airgap-1` cannot reach it and points
-them at its Harbor registry; the cluster is more specific than the
-environment, so Harbor wins. The catalog app says where each property lands:
-the chart's registry, a Helm parameter, a field of the `ExternalSecret`.
+**Its properties are resolved**, in the same order: the catalog's
+[defaults](catalog/properties.yaml), then [`prod`'s](envs/prod/properties.yaml),
+then [`airgap-1`'s](clusters/airgap-1/properties.yaml). `prod` points container
+images at a public mirror, but `airgap-1` cannot reach it and points them at
+its Harbor registry; the cluster is more specific than the environment, so
+Harbor wins. The app's [app.yaml](catalog/apps/grafana/app.yaml) says where
+each property lands: the chart's registry, a Helm parameter, a field of the
+`ExternalSecret`.
 
 **The Application comes out** as `prod.grafana.airgap-1` in
 [rendered/airgap-1.yaml](rendered/airgap-1.yaml):
 
 - the Grafana chart, read from the Harbor mirror. Charts are downloaded by
-  Argo CD's repo-server, which runs on `lab-1`, not by `airgap-1`: the chart
-  registry property matters when an air-gapped cluster runs its own Argo CD,
-  or when the central one must use the mirror too;
+  Argo CD on `lab-1`, not by `airgap-1`: the chart registry property matters
+  when the central Argo CD must use the mirror too, or when an air-gapped
+  cluster runs its own Argo CD;
 - the values files of every layer, in order, read from this repository;
-- `global.imageRegistry` set to Harbor, and the `ExternalSecret` switched to
+- `global.imageRegistry` set to Harbor, and the `ExternalSecret` reading from
   the cluster's secret store;
 - the manifests of every layer stacked on [base/](base/), an empty Kustomize
   base.
 
 ## Bootstrapping
 
-Argo CD must run on `lab-1`, and every cluster must be registered in it under
-its layout name. The cluster running Argo CD is registered too, so that the
-ApplicationSet sees it:
+You need Argo CD 3.0 or later running on `lab-1`, the `argocd` command logged
+in to it (`argocd login`), and `kubectl` pointed at `lab-1`. Argo CD on
+`lab-1` must reach the API server of `airgap-1` and the mirrors `airgap-1`
+uses: it renders and applies everything from there.
+
+Register every cluster under its name in the layout, including the one
+running Argo CD, so that the ApplicationSet sees it:
 
 ```sh
 argocd cluster add <lab-1-context> --name lab-1 --in-cluster
@@ -123,9 +212,9 @@ argocd cluster add <lab-1-context> --name lab-1 --in-cluster
 argocd cluster add <airgap-1-context> --name airgap-1
 ```
 
-Then, from this directory and with `kubectl` pointed at `lab-1`, render the
-Applications of `lab-1` once by hand, and sync the one that deploys the
-ApplicationSet (the Sync button in the Argo CD UI does the same):
+From this directory, render the Applications of `lab-1` once by hand, and sync
+the one that deploys the ApplicationSet (the Sync button in the Argo CD UI
+does the same as `argocd app sync`):
 
 ```sh
 helm template layout . --set cluster=lab-1 --set layout.repoURL=https://github.com/therealm-tech/argocd-layout-spec --set layout.targetRevision=HEAD --set layout.path=examples | kubectl apply -n argocd -f -
@@ -137,12 +226,18 @@ argocd app sync platform.layout.lab-1
 
 The ApplicationSet now exists and creates `layout-lab-1` and
 `layout-airgap-1`. Sync both: `layout-lab-1` takes over the Applications
-applied by hand, and `layout-airgap-1` creates those of `airgap-1`. Then sync
-the instances themselves, `platform` first, since its CRDs are what the others
-build on:
+applied by hand, and `layout-airgap-1` creates those of `airgap-1`:
 
 ```sh
 argocd app sync layout-lab-1 layout-airgap-1
+```
+
+Then sync the instances, those of `platform` first, since the others need the
+CRDs they install. `argocd app list` shows them all; the UI does the same in
+a few clicks:
+
+```sh
+argocd app sync platform.cert-manager.lab-1 platform.external-secrets.lab-1 platform.rook-ceph.lab-1 platform.traefik.lab-1
 ```
 
 ## Everyday changes
@@ -152,19 +247,27 @@ Applications, then a sync of the Applications that changed.
 
 - **Install an app in an environment**: add it under `instances:` in the
   environment's `env.yaml`. An app that installs CRDs or other cluster-wide
-  resources goes in `platform`, once per cluster.
+  objects goes in `platform`, once per cluster.
 - **Install an app twice**: two instances with the same `app:`, as `ceph-hdd`
-  and `ceph-ssd` in [envs/prod/env.yaml](envs/prod/env.yaml).
+  and `ceph-ssd` in [envs/prod/env.yaml](envs/prod/env.yaml). Whatever the
+  chart names without its release name, such as Rook's StorageClasses, must
+  differ between the two: see their values files.
 - **Skip an instance on one cluster**: list it under that cluster's
   `disabled:` in `env.yaml`.
 - **Change a value everywhere, for one environment, one cluster, or one
   environment on one cluster**: edit `values/<source>.yaml` in the matching
-  layer of the table above.
-- **Change what a cluster can reach** (a registry, a secret store): edit its
+  layer.
+- **Change what a cluster can reach** (a registry, a Vault): edit its
   `clusters/<cluster>/properties.yaml`.
-- **Add a cluster**: register it in Argo CD, create `clusters/<cluster>/` if it
-  needs anything specific, and list it under `clusters:` in the environments
-  placed on it.
+- **Add a cluster**: register it in Argo CD, create `clusters/<cluster>/` if
+  it needs anything specific, and list it under `clusters:` in the
+  environments placed on it. Disable there the instances it cannot run: the
+  apps of another cluster, like `traefik`, and the layout's own `layout`,
+  which belongs to the cluster running Argo CD only.
+- **Remove an instance**: delete its workloads first, with
+  `argocd app delete <env>.<instance>.<cluster> --cascade`, then remove it
+  from `env.yaml`. Removing it first only deletes its Application, when
+  `layout-<cluster>` is synced with pruning, and leaves its workloads running.
 
 [examples-confidential/](../examples-confidential/) is a second layout, with
 its own environments and clusters, that uses this catalog from another
@@ -172,4 +275,9 @@ repository — for clusters whose configuration must stay private.
 [catalog/Chart.yaml](catalog/Chart.yaml) is what lets it: it packages the
 catalog as a Helm chart.
 
-{{ template "chart.valuesSection" . }}
+## Chart values
+
+The ApplicationSet sets these for each `layout-<cluster>`; you only set them
+yourself when bootstrapping.
+
+{{ template "chart.valuesTable" . }}

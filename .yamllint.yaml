@@ -3,6 +3,9 @@ extends: default
 rules:
   document-start:
     present: false
+    # A test layout holding two documents in one file, on purpose.
+    ignore: |
+      tests/errors/multi-document-manifest/
   braces:
     forbid: non-empty
   brackets:

@@ -13,7 +13,10 @@ that honours the rules below is conforming. §12 describes one that uses only
 native Argo CD features.
 
 Out of scope: operations (version alignment between apps, promotion between
-environments), namespaces, secrets and AppProjects.
+environments, how and when Applications are synced), how namespaces are
+created and shared, secrets and AppProjects. An app MAY name the namespace it
+is deployed to and its Helm release names; nothing else of namespaces is the
+layout's business.
 
 ## 2. Vocabulary
 
@@ -84,8 +87,8 @@ manifests/
    directory under `clusters/` or by being listed in an `env.yaml`. An
    instance is declared in its `env.yaml`. An app is declared by its default
    layer. A source of an instance is declared by being named under `sources`
-   in the `app.yaml` of any of the instance's layers, even with a `null`
-   value.
+   in the `app.yaml` of any of the instance's layers, on any of its
+   environment's clusters, even with a `null` value.
 5. A directory or file that does not match a declared environment, cluster,
    app, instance or source is an error (orphan). Orphans are checked against
    declared names, not against the merged configuration: a values file whose
@@ -136,14 +139,16 @@ precedence. Each higher layer is applied on top of the ones below.
 ## 6. `app.yaml`
 
 ```yaml
+namespace: rook-ceph
 sources:
   chart:
     type: helm
     repoURL:
       property: rookCharts
     repository: release
-    chart: rook-ceph-cluster
-    targetRevision: v1.20.8
+    chart: rook-ceph
+    targetRevision: "v1.20.8"
+    releaseName: rook-ceph
     properties:
       image.registry: imageRegistry
 manifests:
@@ -151,6 +156,9 @@ manifests:
     external-secrets.io/ClusterSecretStore/vault:
       /spec/provider/vault/server: vaultUrl
 ```
+
+`namespace` is OPTIONAL: the namespace the instance is deployed to. Without
+it, the wiring chooses one.
 
 ### 6.1 Sources
 
@@ -167,6 +175,7 @@ manifests:
    | `chart` | the chart name, for a `helm` source from a chart repository |
    | `path` | the path in the repository, for any other source |
    | `targetRevision` | the chart version or the Git revision, as a string: an unquoted `1.10` is the number 1.1 in YAML |
+   | `releaseName` | OPTIONAL, for a `helm` source: its Helm release name; without it, the wiring chooses one |
    | `properties` | the property mapping of the source (§9.3) |
 
 3. `repoURL` is either a literal string or a map with a single `property` key
@@ -206,11 +215,14 @@ whose shape depends on the type (§9.3).
    generators and the like change resource identities. `resources` lists every
    file of `resources/`, and `patches` every file of `patches/`, each as a
    single `path`.
-3. A file of `resources/` holds exactly one resource and is named after its
-   identity.
+3. A file of `resources/` holds exactly one resource, in a single YAML
+   document, and is named after its identity.
 4. A file of `patches/` is a strategic merge patch named after the identity of
-   its target. The target MUST be present once the lower layers are applied.
-   A patch containing `$patch: delete` removes the resource.
+   its target. The target MUST be present once the lower layers and the
+   resources of the patch's own layer are applied. A patch containing
+   `$patch: delete` removes the resource. On a custom resource, a strategic
+   merge patch replaces lists as a whole: Kustomize knows no merge key for
+   them.
 5. A layer adds a resource by putting it in `resources/`, and changes, replaces
    or removes one with a patch. It cannot add a resource whose identity is
    already present: Kustomize rejects the duplicate before applying patches.
@@ -248,7 +260,10 @@ whose shape depends on the type (§9.3).
 3. Referencing an undefined property is an error.
 4. A property keeps its YAML type wherever the target allows it: a string
    stays a string in a Helm parameter, and a number stays a number in a
-   Kustomize patch.
+   Kustomize patch. Jsonnet variables are strings: a Jsonnet program parses
+   the ones it needs as numbers or booleans.
+5. A property name is a string once YAML has parsed it: `y`, `n`, `on`, `off`,
+   `yes`, `no` and `null` MUST be quoted, or avoided.
 
 ### 9.3 Mapping
 
@@ -307,12 +322,14 @@ A conforming layout has none of the following:
    disabled there (§4.5);
 4. a cluster app named like a catalog app (§4.4);
 5. a local instance without `envs/<e>/instances/<i>/app.yaml` (§4.3);
-6. an incomplete source after merge, or a `targetRevision` that is not a
-   string (§6.1);
+6. an incomplete source after merge, a `targetRevision` that is not a string,
+   a property in a field other than `repoURL`, or a `chart` or `releaseName`
+   on a source that is not `helm` (§6.1);
 7. a values file for a non-`helm` source (§7.1);
 8. a `kustomization.yaml` that is not a `Component`, uses another field, or
    does not list exactly the files of `resources/` and `patches/` (§8.2);
-9. a manifest file whose name does not match its identity (§8.3);
+9. a manifest file whose name does not match its identity, or that holds more
+   than one YAML document (§8.3);
 10. a patch whose target is absent, or a resource added twice (§8.4, §8.5);
 11. an app holding resources of a fixed identity instantiated several times on
     one cluster (§8.7);
@@ -350,20 +367,29 @@ This section is informative. A layout can be assembled by Argo CD alone:
    Jsonnet variables and Kustomize patches of the mapping, and the manifest
    components of every layer on the empty base.
 5. It names what it emits so that nothing collides: the Application
-   `<env>.<instance>.<cluster>` (`.` cannot appear in a name of the layout),
-   and the destination namespace and Helm release `<env>-<instance>`, checked
-   unique on the cluster and no longer than the 53 characters of a release
-   name. Names a chart derives from its release, such as its ClusterRoles,
-   are then unique too; only the fixed identities of §8.7 can collide.
-6. A separate catalog is a Helm chart too, published at a version and tagged
+   `<env>.<instance>.<cluster>` (`.` cannot appear in a name of the layout).
+   An instance without `namespace` goes to `<env>-<instance>`, and a Helm
+   source without `releaseName` is released as `<env>-<instance>`, or
+   `<env>-<instance>-<source>` when the app has several Helm sources. Names
+   a chart derives from its release, such as its ClusterRoles, are then
+   unique across environments. Two instances installing the same release in
+   the same namespace of a cluster fail the render, and so does a release
+   name longer than Helm's 53 characters.
+6. The Application names it emits need Argo CD 3.0 or later, whose default
+   annotation-based resource tracking takes names longer than a label's 63
+   characters. The layout's own directories, `catalog/`, `clusters/` and
+   `envs/`, never collide with the names Helm reserves at a chart's root.
+7. A separate catalog is a Helm chart too, published at a version and tagged
    `v<version>` in Git. Its `Chart.yaml` names the Git repository in
    `sources`, and the catalog's directory there in a `layout/catalog-path`
    annotation when it is not the root. The layout chart declares it as a
-   dependency and reads its files through `.Subcharts`; the generated
+   dependency named `catalog` and reads its files through `.Subcharts`; the generated
    Applications fetch its values files through a `ref` source and its
    manifests as remote Kustomize components, both at that tag. Upgrading the
-   catalog is bumping the dependency. Nothing but this convention ties the
-   package to the tag: they are published together, from the same commit.
+   catalog is bumping the dependency and refreshing `Chart.lock`. Nothing but
+   this convention ties the package to the tag: they are published together,
+   from the same commit. Argo CD's repo-server fetches the remote components
+   itself, with the credentials it holds for that repository.
 
 Everything is rendered by Helm and Kustomize; no plugin is involved.
 [examples/](examples/) implements this wiring with its catalog alongside, and

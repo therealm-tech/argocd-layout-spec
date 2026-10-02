@@ -10,13 +10,13 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: airgap-1
-    namespace: platform-cert-manager
+    namespace: cert-manager
   sources:
     - repoURL: harbor.airgap.internal/quay.io/jetstack/charts
       chart: cert-manager
       targetRevision: "v1.21.2"
       helm:
-        releaseName: platform-cert-manager
+        releaseName: cert-manager
         valueFiles:
           - $layout/examples/catalog/apps/cert-manager/values/chart.yaml
         parameters:
@@ -48,6 +48,79 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: platform.external-secrets.airgap-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: airgap-1
+    namespace: external-secrets
+  sources:
+    - repoURL: harbor.airgap.internal/ghcr.io/external-secrets/charts
+      chart: external-secrets
+      targetRevision: "2.11.0"
+      helm:
+        releaseName: external-secrets
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/external-secrets/manifests
+        patches:
+          - target:
+              group: external-secrets.io
+              kind: ClusterSecretStore
+              name: vault
+            patch: |-
+              - op: replace
+                path: /spec/provider/vault/server
+                value: "https://vault.airgap.internal"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform.rook-ceph.airgap-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: airgap-1
+    namespace: rook-ceph
+  sources:
+    - repoURL: https://charts.airgap.internal/rook/release
+      chart: rook-ceph
+      targetRevision: "v1.20.8"
+      helm:
+        releaseName: rook-ceph
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: prod.ceph-hdd.airgap-1
   namespace: argocd
 spec:
@@ -57,7 +130,7 @@ spec:
     name: airgap-1
     namespace: prod-ceph-hdd
   sources:
-    - repoURL: harbor.airgap.internal/charts.rook.io/release
+    - repoURL: https://charts.airgap.internal/rook/release
       chart: rook-ceph-cluster
       targetRevision: "v1.20.8"
       helm:
@@ -98,7 +171,7 @@ spec:
     name: airgap-1
     namespace: prod-ceph-ssd
   sources:
-    - repoURL: harbor.airgap.internal/charts.rook.io/release
+    - repoURL: https://charts.airgap.internal/rook/release
       chart: rook-ceph-cluster
       targetRevision: "v1.20.8"
       helm:
@@ -170,7 +243,7 @@ spec:
             patch: |-
               - op: replace
                 path: /spec/secretStoreRef/name
-                value: "aws-secrets-manager"
+                value: "vault"
   syncPolicy:
     retry:
       limit: 10

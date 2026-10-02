@@ -10,13 +10,13 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: lab-1
-    namespace: platform-cert-manager
+    namespace: cert-manager
   sources:
     - repoURL: quay.io/jetstack/charts
       chart: cert-manager
       targetRevision: "v1.21.2"
       helm:
-        releaseName: platform-cert-manager
+        releaseName: cert-manager
         valueFiles:
           - $layout/examples/catalog/apps/cert-manager/values/chart.yaml
         parameters:
@@ -47,6 +47,50 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: platform.external-secrets.lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: external-secrets
+  sources:
+    - repoURL: ghcr.io/external-secrets/charts
+      chart: external-secrets
+      targetRevision: "2.11.0"
+      helm:
+        releaseName: external-secrets
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/external-secrets/manifests
+        patches:
+          - target:
+              group: external-secrets.io
+              kind: ClusterSecretStore
+              name: vault
+            patch: |-
+              - op: replace
+                path: /spec/provider/vault/server
+                value: "https://vault.lab-1.example.com"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: platform.layout.lab-1
   namespace: argocd
 spec:
@@ -54,7 +98,7 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: lab-1
-    namespace: platform-layout
+    namespace: argocd
   sources:
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
@@ -102,6 +146,35 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: platform.rook-ceph.lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: rook-ceph
+  sources:
+    - repoURL: https://charts.rook.io/release
+      chart: rook-ceph
+      targetRevision: "v1.20.8"
+      helm:
+        releaseName: rook-ceph
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: platform.traefik.lab-1
   namespace: argocd
 spec:
@@ -109,13 +182,13 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: lab-1
-    namespace: platform-traefik
+    namespace: traefik
   sources:
     - repoURL: ghcr.io/traefik/helm
       chart: traefik
       targetRevision: "41.6.0"
       helm:
-        releaseName: platform-traefik
+        releaseName: traefik
         valueFiles:
           - $layout/examples/clusters/lab-1/apps/traefik/values/chart.yaml
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
@@ -215,7 +288,7 @@ spec:
             patch: |-
               - op: replace
                 path: /spec/secretStoreRef/name
-                value: "vault-lab"
+                value: "vault"
   syncPolicy:
     retry:
       limit: 10
@@ -269,7 +342,7 @@ spec:
             patch: |-
               - op: replace
                 path: /spec/secretStoreRef/name
-                value: "vault-lab"
+                value: "vault"
   syncPolicy:
     retry:
       limit: 10

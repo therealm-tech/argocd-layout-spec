@@ -1,7 +1,9 @@
+namespace: traefik
 sources:
   chart:
     type: helm
     repoURL: ghcr.io
     repository: traefik/helm
     chart: traefik
+    releaseName: traefik
     targetRevision: 41.6.0

@@ -13,10 +13,15 @@ spec:
     namespace: dev-mixed
   sources:
     - repoURL: registry.example.com/charts
+      chart: addon
+      targetRevision: "0.3.0"
+      helm:
+        releaseName: dev-mixed-addon
+    - repoURL: registry.example.com/charts
       chart: mixed
       targetRevision: "1.10"
       helm:
-        releaseName: dev-mixed
+        releaseName: dev-mixed-chart
         valueFiles:
           - $layout/examples/catalog/apps/mixed/values/chart.yaml
         parameters:
@@ -95,13 +100,13 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: lab-1
-    namespace: dev-trimmed
+    namespace: shared
   sources:
     - repoURL: registry.example.com/charts
       chart: mixed
       targetRevision: "2.0.0"
       helm:
-        releaseName: dev-trimmed
+        releaseName: trimmed
         valueFiles:
           - $layout/examples/catalog/apps/mixed/values/chart.yaml
         parameters:

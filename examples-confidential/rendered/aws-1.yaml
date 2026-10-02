@@ -67,13 +67,13 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: aws-1
-    namespace: platform-cert-manager
+    namespace: cert-manager
   sources:
     - repoURL: quay.io/jetstack/charts
       chart: cert-manager
       targetRevision: "v1.21.2"
       helm:
-        releaseName: platform-cert-manager
+        releaseName: cert-manager
         valueFiles:
           - $catalog/examples/catalog/apps/cert-manager/values/chart.yaml
         parameters:
@@ -105,6 +105,42 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: platform.external-secrets.aws-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: aws-1
+    namespace: external-secrets
+  sources:
+    - repoURL: ghcr.io/external-secrets/charts
+      chart: external-secrets
+      targetRevision: "2.11.0"
+      helm:
+        releaseName: external-secrets
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples-confidential/base
+      kustomize:
+        components:
+          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/external-secrets/manifests?ref=v0.1.0
+          - ../clusters/aws-1/overrides/external-secrets/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: platform.layout.aws-1
   namespace: argocd
 spec:
@@ -112,7 +148,7 @@ spec:
   revisionHistoryLimit: 0
   destination:
     name: aws-1
-    namespace: platform-layout
+    namespace: argocd
   sources:
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"

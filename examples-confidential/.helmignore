@@ -1,4 +1,4 @@
-values-lint.yaml
-README.md
-README.md.gotmpl
-rendered/
+/values-lint.yaml
+/README.md
+/README.md.gotmpl
+/rendered/

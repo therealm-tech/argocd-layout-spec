@@ -66,7 +66,11 @@
 {{- range $file, $_ := .Files.Glob "clusters/**" -}}
 {{- $parts := splitList "/" $file -}}
 {{- $c := index $parts 1 -}}
+{{- include "layout.checkLabel" (dict "name" $c "what" "cluster" "context" $file) -}}
 {{- $rest := slice $parts 2 -}}
+{{- if gt (len $rest) 1 -}}
+{{- include "layout.checkLabel" (dict "name" (index $rest 1) "what" "app" "context" $file) -}}
+{{- end -}}
 {{- if eq (len $rest) 1 -}}
 {{- if ne (first $rest) "properties.yaml" -}}
 {{- fail (printf "%s: matches nothing the layout defines (SPEC §3.5)" $file) -}}
@@ -83,6 +87,21 @@
 {{- else -}}
 {{- fail (printf "%s: matches nothing the layout defines (SPEC §3.5)" $file) -}}
 {{- end -}}
+{{- end -}}
+
+{{- /* Every app directory, used on this cluster or not (SPEC §3.5, §8). */ -}}
+{{- $appDirectories := dict -}}
+{{- range $file := concat (include "layout.glob" (merge (dict "path" "catalog/apps") $io) | fromJsonArray) (include "layout.glob" (merge (dict "path" "clusters") $io) | fromJsonArray) -}}
+{{- $parts := splitList "/" $file -}}
+{{- if hasPrefix "catalog/" $file -}}
+{{- $_ := set $appDirectories (join "/" (slice $parts 0 3)) true -}}
+{{- else if and (gt (len $parts) 4) (has (index $parts 2) (list "apps" "overrides")) -}}
+{{- $_ := set $appDirectories (join "/" (slice $parts 0 4)) true -}}
+{{- end -}}
+{{- end -}}
+{{- range $directory, $_ := $appDirectories -}}
+{{- include "layout.checkLabel" (dict "name" (base $directory) "what" "app" "context" $directory) -}}
+{{- include "layout.checkAppDirectory" (merge (dict "layer" $directory) $io) -}}
 {{- end -}}
 
 {{- /* Instances placed on this cluster. */ -}}
@@ -138,14 +157,21 @@
 
 {{- /* Merge app.yaml across layers (SPEC §6.2). */ -}}
 {{- $spec := dict -}}
-{{- $declaredSources := list -}}
 {{- range $layer := $layers -}}
+{{- include "layout.mergeFiles" (merge (dict "dst" $spec "paths" (list (printf "%s/app.yaml" $layer))) $io) -}}
+{{- end -}}
+{{- /* A source is declared by any layer of the instance, on any of its clusters (SPEC §3.4). */ -}}
+{{- $declarations := $layers -}}
+{{- range $c, $_ := $e.clusters -}}
+{{- $declarations = concat $declarations (list (printf "clusters/%s/apps/%s" $c $app) (printf "clusters/%s/overrides/%s" $c $app) (printf "envs/%s/clusters/%s/instances/%s" $env $c $instance)) -}}
+{{- end -}}
+{{- $declaredSources := list -}}
+{{- range $layer := $declarations -}}
 {{- $content := include "layout.parse" (merge (dict "path" (printf "%s/app.yaml" $layer)) $io) | fromJson -}}
 {{- range $name, $_ := $content.sources | default (dict) -}}
 {{- include "layout.checkLabel" (dict "name" $name "what" "source" "context" (printf "%s/app.yaml" $layer)) -}}
 {{- $declaredSources = append $declaredSources $name -}}
 {{- end -}}
-{{- include "layout.merge" (dict "dst" $spec "src" $content) -}}
 {{- end -}}
 {{- $sources := $spec.sources | default (dict) -}}
 
@@ -209,15 +235,32 @@
 {{- fail (printf "%s: no source and no manifests (SPEC §6.1.1)" $context) -}}
 {{- end -}}
 
-{{- /* Names unique on the cluster (SPEC §8.7, §12). */ -}}
-{{- $namespace := printf "%s-%s" $env $instance -}}
-{{- if gt (len $namespace) 53 -}}
-{{- fail (printf "%s: %q is longer than the 53 characters of a Helm release name; shorten the environment or instance name" $context $namespace) -}}
+{{- /* Namespace and Helm releases, unique together on the cluster (SPEC §6, §12). */ -}}
+{{- $namespace := $spec.namespace | default (printf "%s-%s" $env $instance) -}}
+{{- include "layout.checkLabel" (dict "name" (toString $namespace) "what" "namespace" "context" $context) -}}
+{{- $helmSources := list -}}
+{{- range $name, $source := $sources -}}
+{{- if eq (toString $source.type) "helm" -}}
+{{- $helmSources = append $helmSources $name -}}
 {{- end -}}
-{{- if hasKey $namespaces $namespace -}}
-{{- fail (printf "%s and %s both map to namespace %q; rename one" (index $namespaces $namespace) $context $namespace) -}}
 {{- end -}}
-{{- $_ := set $namespaces $namespace $context -}}
+{{- $releases := dict -}}
+{{- range $name := $helmSources -}}
+{{- $default := printf "%s-%s" $env $instance -}}
+{{- if gt (len $helmSources) 1 -}}
+{{- $default = printf "%s-%s-%s" $env $instance $name -}}
+{{- end -}}
+{{- $release := toString ((index $sources $name).releaseName | default $default) -}}
+{{- if not (and (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $release) (le (len $release) 53)) -}}
+{{- fail (printf "%s, source %s: Helm release name %q must be a lowercase name of at most 53 characters; set releaseName, or shorten the environment or instance name" $context $name $release) -}}
+{{- end -}}
+{{- $key := printf "%s/%s" $namespace $release -}}
+{{- if hasKey $namespaces $key -}}
+{{- fail (printf "%s and %s both install Helm release %q in namespace %q; set a different releaseName or namespace" (index $namespaces $key) $context $release $namespace) -}}
+{{- end -}}
+{{- $_ := set $namespaces $key $context -}}
+{{- $_ := set $releases $name $release -}}
+{{- end -}}
 {{- if $app -}}
 {{- if hasKey $apps $app -}}
 {{- $previous := index $apps $app -}}
@@ -251,6 +294,14 @@ spec:
     {{- if not (kindIs "string" $source.targetRevision) -}}
     {{- fail (printf "%s: targetRevision %v is not a string; quote it so that YAML does not read it as a number (SPEC §6.1.2)" $sourceContext $source.targetRevision) -}}
     {{- end -}}
+    {{- range $field, $value := $source -}}
+    {{- if and (kindIs "map" $value) (not (has $field (list "repoURL" "properties"))) -}}
+    {{- fail (printf "%s: %s cannot take a property, only repoURL can (SPEC §6.1.3)" $sourceContext $field) -}}
+    {{- end -}}
+    {{- end -}}
+    {{- if and (ne (toString $source.type) "helm") (or $source.chart $source.releaseName) -}}
+    {{- fail (printf "%s: chart and releaseName only apply to a helm source (SPEC §6.1.2)" $sourceContext) -}}
+    {{- end -}}
     {{- if or (and $source.chart $source.path) (not (or $source.chart $source.path)) -}}
     {{- fail (printf "%s: exactly one of chart and path is required (SPEC §6.1.4)" $sourceContext) -}}
     {{- end -}}
@@ -275,7 +326,7 @@ spec:
       {{- $mapping := $source.properties | default (dict) }}
       {{- if eq $source.type "helm" }}
       helm:
-        releaseName: {{ $namespace }}
+        releaseName: {{ index $releases $name }}
         {{- $valueFiles := list -}}
         {{- range $layer := $layers -}}
         {{- $file := printf "%s/values/%s.yaml" $layer $name -}}

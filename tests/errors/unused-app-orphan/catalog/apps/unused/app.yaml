@@ -1,0 +1,6 @@
+sources:
+  chart:
+    type: helm
+    repoURL: example.com/charts
+    chart: app
+    targetRevision: "1.0.0"

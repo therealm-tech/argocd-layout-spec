@@ -1,0 +1,10 @@
+namespace: rook-ceph
+sources:
+  chart:
+    type: helm
+    repoURL:
+      property: rookCharts
+    repository: release
+    chart: rook-ceph
+    targetRevision: "v1.20.8"
+    releaseName: rook-ceph
