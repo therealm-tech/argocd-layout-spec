@@ -1,0 +1,156 @@
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: acme.grafana.aws-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: aws-1
+    namespace: acme-grafana
+  sources:
+    - repoURL: ghcr.io/grafana/helm-charts
+      chart: grafana
+      targetRevision: "10.5.15"
+      helm:
+        releaseName: acme-grafana
+        valueFiles:
+          - $catalog/examples/catalog/apps/grafana/values/chart.yaml
+          - $layout/examples-confidential/envs/acme/instances/grafana/values/chart.yaml
+        parameters:
+          - name: global.imageRegistry
+            value: "docker.io"
+            forceString: true
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "v0.1.0"
+      ref: catalog
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples-confidential/base
+      kustomize:
+        components:
+          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/grafana/manifests?ref=v0.1.0
+        patches:
+          - target:
+              group: external-secrets.io
+              kind: ExternalSecret
+              name: grafana-admin
+            patch: |-
+              - op: replace
+                path: /spec/secretStoreRef/name
+                value: "aws-secrets-manager"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform.cert-manager.aws-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: aws-1
+    namespace: platform-cert-manager
+  sources:
+    - repoURL: quay.io/jetstack/charts
+      chart: cert-manager
+      targetRevision: "v1.21.2"
+      helm:
+        releaseName: platform-cert-manager
+        valueFiles:
+          - $catalog/examples/catalog/apps/cert-manager/values/chart.yaml
+        parameters:
+          - name: image.registry
+            value: "quay.io"
+            forceString: true
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "v0.1.0"
+      ref: catalog
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples-confidential/base
+      kustomize:
+        components:
+          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/cert-manager/manifests?ref=v0.1.0
+          - ../clusters/aws-1/overrides/cert-manager/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform.layout.aws-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: aws-1
+    namespace: platform-layout
+  sources:
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples-confidential/base
+      kustomize:
+        components:
+          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/layout/manifests?ref=v0.1.0
+        patches:
+          - target:
+              group: argoproj.io
+              kind: ApplicationSet
+              name: layout
+              namespace: argocd
+            patch: |-
+              - op: replace
+                path: /spec/template/spec/source/helm/valuesObject/layout/path
+                value: "examples-confidential"
+              - op: replace
+                path: /spec/template/spec/source/helm/valuesObject/layout/repoURL
+                value: "https://github.com/therealm-tech/argocd-layout-spec"
+              - op: replace
+                path: /spec/template/spec/source/helm/valuesObject/layout/targetRevision
+                value: "HEAD"
+              - op: replace
+                path: /spec/template/spec/source/path
+                value: "examples-confidential"
+              - op: replace
+                path: /spec/template/spec/source/repoURL
+                value: "https://github.com/therealm-tech/argocd-layout-spec"
+              - op: replace
+                path: /spec/template/spec/source/targetRevision
+                value: "HEAD"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true

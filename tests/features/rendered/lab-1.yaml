@@ -1,0 +1,135 @@
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev.mixed.lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: dev-mixed
+  sources:
+    - repoURL: registry.example.com/charts
+      chart: mixed
+      targetRevision: "1.10"
+      helm:
+        releaseName: dev-mixed
+        valueFiles:
+          - $layout/examples/catalog/apps/mixed/values/chart.yaml
+        parameters:
+          - name: debug
+            value: "true"
+          - name: image.registry
+            value: "registry.example.com"
+            forceString: true
+          - name: replicaCount
+            value: "2"
+    - repoURL: https://git.example.com/library
+      path: jsonnet
+      targetRevision: "main"
+      directory:
+        jsonnet:
+          extVars:
+            - name: api
+              value: "https://api.example.com"
+          tlas:
+            - name: debug
+              value: "true"
+    - repoURL: https://git.example.com/overlay
+      path: deploy
+      targetRevision: "main"
+      kustomize:
+        patches:
+          - target:
+              group: apps
+              kind: Deployment
+              name: overlay
+            patch: |-
+              - op: replace
+                path: /spec/replicas
+                value: 2
+    - repoURL: https://git.example.com/raw
+      path: manifests
+      targetRevision: "main"
+      directory: {}
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/mixed/manifests
+          - ../clusters/lab-1/overrides/mixed/manifests
+        patches:
+          - target:
+              kind: ConfigMap
+              name: settings
+            patch: |-
+              - op: replace
+                path: /data/api
+                value: "https://api.example.com"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev.trimmed.lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: dev-trimmed
+  sources:
+    - repoURL: registry.example.com/charts
+      chart: mixed
+      targetRevision: "2.0.0"
+      helm:
+        releaseName: dev-trimmed
+        valueFiles:
+          - $layout/examples/catalog/apps/mixed/values/chart.yaml
+        parameters:
+          - name: image.registry
+            value: "registry.example.com"
+            forceString: true
+          - name: replicaCount
+            value: "2"
+    - repoURL: https://git.example.com/raw
+      path: manifests
+      targetRevision: "main"
+      directory: {}
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      ref: layout
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/mixed/manifests
+          - ../clusters/lab-1/overrides/mixed/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true

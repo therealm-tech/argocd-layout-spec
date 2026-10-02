@@ -35,20 +35,22 @@ flowchart LR
   example works from one checkout; a real private repository points at the
   registry the catalog is published to.
 - **This repository holds only its environments and clusters**:
-  [envs/acme/](envs/acme/) runs cert-manager and Grafana on `aws-1`, and
+  [envs/platform/](envs/platform/) runs cert-manager and the layout's
+  ApplicationSet on `aws-1`, [envs/acme/](envs/acme/) runs Grafana there, and
   [clusters/aws-1/](clusters/aws-1/) adapts them to AWS — its own secret store,
   its own ingress class.
 - **The wiring is the same chart** as in [examples/](../examples/), shared
-  through symbolic links; a real private repository would take it as a Helm
-  dependency too. It finds the catalog in the dependency instead of a
-  `catalog/` directory, and nothing else changes.
+  through symbolic links. A real private repository would copy
+  [templates/](templates/), or take them from a Helm library chart whose
+  templates are included from its own `templates/`. It finds the catalog in
+  the dependency instead of a `catalog/` directory, and nothing else changes.
 
 ## What the Applications fetch
 
 The chart reads the catalog's files from the dependency, but Argo CD still
 needs the catalog's values files and manifests when it renders each
 Application. It fetches them from the catalog's Git repository, at the tag
-matching the dependency's version, `v0.1.0`. `acme-cert-manager-aws-1` in
+matching the dependency's version, `v0.1.0`. `platform.cert-manager.aws-1` in
 [rendered/aws-1.yaml](rendered/aws-1.yaml) shows it:
 
 - its values file comes from `$catalog/…`, a second Git source at `v0.1.0`;
@@ -75,7 +77,7 @@ helm template layout . --set cluster=aws-1 --set layout.repoURL=https://github.c
 ```
 
 ```sh
-argocd app sync platform-layout-aws-1
+argocd app sync platform.layout.aws-1
 ```
 
 The ApplicationSet it deploys comes from the catalog, and points at this

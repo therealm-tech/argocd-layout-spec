@@ -1,0 +1,4 @@
+registry: registry.example.com
+replicas: 2
+debug: true
+apiURL: https://api.example.com

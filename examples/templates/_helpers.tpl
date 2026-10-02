@@ -28,6 +28,9 @@ annotation (the root by default), and is tagged v<chart version>.
 {{- define "layout.catalog" -}}
 {{- $subcharts := .Subcharts | default (dict) -}}
 {{- if hasKey $subcharts "catalog" -}}
+{{- if .Files.Glob "catalog/**" -}}
+{{- fail "the catalog is both a chart dependency and a catalog/ directory: keep one" -}}
+{{- end -}}
 {{- $chart := (index $subcharts "catalog").Chart -}}
 {{- if not $chart.Sources -}}
 {{- fail "the catalog chart must name its Git repository in `sources`" -}}
@@ -48,28 +51,52 @@ annotation (the root by default), and is tagged v<chart version>.
 {{- end -}}
 {{- end -}}
 
-{{/* "true" when layout directory .path holds any file, empty otherwise. */}}
-{{- define "layout.exists" -}}
+{{/* The files under layout directory .path, as a JSON list of layout paths. */}}
+{{- define "layout.glob" -}}
 {{- $files := .root.Files -}}
 {{- $path := .path -}}
+{{- $prefix := "" -}}
 {{- if and .catalog.remote (hasPrefix "catalog/" .path) -}}
 {{- $files = (index .root.Subcharts "catalog").Files -}}
 {{- $path = trimPrefix "catalog/" .path -}}
+{{- $prefix = "catalog/" -}}
 {{- end -}}
-{{- if gt (len ($files.Glob (printf "%s/**" $path))) 0 -}}
+{{- $out := list -}}
+{{- range $file, $_ := $files.Glob (printf "%s/**" $path) -}}
+{{- $out = append $out (printf "%s%s" $prefix $file) -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end -}}
+
+{{/* "true" when layout directory .path holds any file, empty otherwise. */}}
+{{- define "layout.exists" -}}
+{{- if include "layout.glob" . | fromJsonArray -}}
 true
 {{- end -}}
+{{- end -}}
+
+{{/* Layout file .path parsed as YAML, as JSON; an empty map when it does not exist. */}}
+{{- define "layout.parse" -}}
+{{- $content := include "layout.read" . | fromYaml -}}
+{{- if and (hasKey $content "Error") (eq (len $content) 1) -}}
+{{- fail (printf "%s: %s" .path $content.Error) -}}
+{{- end -}}
+{{- toJson $content -}}
 {{- end -}}
 
 {{/* Merges every existing file of .paths, in order, into .dst. */}}
 {{- define "layout.mergeFiles" -}}
 {{- $ctx := . -}}
 {{- range $path := .paths -}}
-{{- $content := include "layout.read" (dict "root" $ctx.root "catalog" $ctx.catalog "path" $path) | fromYaml -}}
-{{- if hasKey $content "Error" -}}
-{{- fail (printf "%s: %s" $path $content.Error) -}}
-{{- end -}}
+{{- $content := include "layout.parse" (dict "root" $ctx.root "catalog" $ctx.catalog "path" $path) | fromJson -}}
 {{- include "layout.merge" (dict "dst" $ctx.dst "src" $content) -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Fails the render when .name is not an RFC 1123 label (SPEC §3.3). */}}
+{{- define "layout.checkLabel" -}}
+{{- if not (and (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" .name) (le (len .name) 63)) -}}
+{{- fail (printf "%s: %s %q is not an RFC 1123 label (SPEC §3.3)" .context .what .name) -}}
 {{- end -}}
 {{- end -}}
 
@@ -78,6 +105,79 @@ true
 {{- if not (hasKey .props .name) -}}
 {{- fail (printf "%s: undefined property %q" .context .name) -}}
 {{- end -}}
+{{- end -}}
+
+{{/* The identity of resource .obj (SPEC §2). */}}
+{{- define "layout.identity" -}}
+{{- $metadata := .obj.metadata | default (dict) -}}
+{{- if not (and .obj.apiVersion .obj.kind $metadata.name) -}}
+{{- fail (printf "%s: apiVersion, kind and metadata.name are required" .context) -}}
+{{- end -}}
+{{- $apiVersion := toString .obj.apiVersion -}}
+{{- $group := "core" -}}
+{{- if contains "/" $apiVersion -}}
+{{- $group = first (splitList "/" $apiVersion) -}}
+{{- end -}}
+{{- printf "%s/%s/%s" $group .obj.kind $metadata.name -}}
+{{- with $metadata.namespace -}}
+{{- printf "_%s" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Checks the manifests/ directory of layer .layer against SPEC §8.1-§8.4, and
+returns, as JSON, the identities it adds and the patches it applies, in order.
+*/}}
+{{- define "layout.manifests" -}}
+{{- $io := dict "root" .root "catalog" .catalog -}}
+{{- $dir := printf "%s/manifests" .layer -}}
+{{- $kustomization := printf "%s/kustomization.yaml" $dir -}}
+{{- $k := include "layout.parse" (merge (dict "path" $kustomization) $io) | fromJson -}}
+{{- if ne (toString $k.kind) "Component" -}}
+{{- fail (printf "%s: must be a Kustomize Component (SPEC §8.1)" $kustomization) -}}
+{{- end -}}
+{{- range $field, $_ := $k -}}
+{{- if not (has $field (list "apiVersion" "kind" "resources" "patches")) -}}
+{{- fail (printf "%s: field %q is not allowed (SPEC §8.2)" $kustomization $field) -}}
+{{- end -}}
+{{- end -}}
+{{- $listed := list -}}
+{{- range $resource := $k.resources | default (list) -}}
+{{- if not (hasPrefix "resources/" (toString $resource)) -}}
+{{- fail (printf "%s: resource %q is not under resources/ (SPEC §8.2)" $kustomization $resource) -}}
+{{- end -}}
+{{- $listed = append $listed (printf "%s/%s" $dir $resource) -}}
+{{- end -}}
+{{- range $patch := $k.patches | default (list) -}}
+{{- if not (and (kindIs "map" $patch) (eq (len $patch) 1) (hasPrefix "patches/" (toString $patch.path))) -}}
+{{- fail (printf "%s: a patch is only `path: patches/…` (SPEC §8.2)" $kustomization) -}}
+{{- end -}}
+{{- $listed = append $listed (printf "%s/%s" $dir $patch.path) -}}
+{{- end -}}
+{{- $files := include "layout.glob" (merge (dict "path" $dir) $io) | fromJsonArray -}}
+{{- range $file := $files -}}
+{{- if and (ne $file $kustomization) (not (has $file $listed)) -}}
+{{- fail (printf "%s: not listed in %s (SPEC §8.2)" $file $kustomization) -}}
+{{- end -}}
+{{- end -}}
+{{- $out := dict "resources" (list) "patches" (list) -}}
+{{- range $file := $listed -}}
+{{- if not (has $file $files) -}}
+{{- fail (printf "%s: lists %s, which does not exist" $kustomization $file) -}}
+{{- end -}}
+{{- $obj := include "layout.parse" (merge (dict "path" $file) $io) | fromJson -}}
+{{- $identity := include "layout.identity" (dict "obj" $obj "context" $file) -}}
+{{- $kind := ternary "resources" "patches" (hasPrefix (printf "%s/resources/" $dir) $file) -}}
+{{- if ne $file (printf "%s/%s/%s.yaml" $dir $kind $identity) -}}
+{{- fail (printf "%s: must be named %s/%s.yaml after its content (SPEC §8.3)" $file $kind $identity) -}}
+{{- end -}}
+{{- if eq $kind "resources" -}}
+{{- $_ := set $out "resources" (append $out.resources $identity) -}}
+{{- else -}}
+{{- $_ := set $out "patches" (append $out.patches (dict "identity" $identity "delete" (eq (toString (index $obj "$patch")) "delete") "file" $file)) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
 {{- end -}}
 
 {{/* A Kustomize patch target from a resource identity (SPEC §2). */}}
@@ -99,16 +199,19 @@ namespace: {{ index $nameParts 1 }}
 
 {{/*
 Kustomize patches setting mapped properties (SPEC §9.3): one JSON patch per
-resource, one `add` per pointer.
+resource, one `replace` per pointer.
 */}}
 {{- define "layout.patches" -}}
 {{- $ctx := . -}}
 {{- range $identity, $pointers := .mapping }}
+{{- if not (kindIs "map" $pointers) }}
+{{- fail (printf "%s: the mapping of %q must map JSON pointers to properties" $ctx.context $identity) }}
+{{- end }}
 - target:
     {{- include "layout.target" (dict "identity" $identity "context" $ctx.context) | trim | nindent 4 }}
   patch: |-
     {{- range $pointer, $property := $pointers }}
-    - op: add
+    - op: replace
       path: {{ $pointer }}
       {{- include "layout.requireProperty" (dict "props" $ctx.props "name" $property "context" $ctx.context) }}
       value: {{ index $ctx.props $property | toJson }}
@@ -123,6 +226,16 @@ resource, one `add` per pointer.
 {{- .path -}}
 {{- else -}}
 {{- printf "%s/%s" (trimSuffix "/" $base) .path -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The path of catalog file .path in the catalog's own repository. */}}
+{{- define "layout.catalogPath" -}}
+{{- $rel := trimPrefix "catalog/" .path -}}
+{{- if .catalog.path -}}
+{{- printf "%s/%s" .catalog.path $rel -}}
+{{- else -}}
+{{- $rel -}}
 {{- end -}}
 {{- end -}}
 
@@ -144,15 +257,5 @@ relative to it, or a remote URL for a catalog in its own repository.
 {{- printf "%s//%s/manifests?ref=%s" .catalog.repoURL (include "layout.catalogPath" (dict "catalog" .catalog "path" .layer)) .catalog.revision -}}
 {{- else -}}
 {{- printf "../%s/manifests" .layer -}}
-{{- end -}}
-{{- end -}}
-
-{{/* The path of catalog file .path in the catalog's own repository. */}}
-{{- define "layout.catalogPath" -}}
-{{- $rel := trimPrefix "catalog/" .path -}}
-{{- if .catalog.path -}}
-{{- printf "%s/%s" .catalog.path $rel -}}
-{{- else -}}
-{{- $rel -}}
 {{- end -}}
 {{- end -}}

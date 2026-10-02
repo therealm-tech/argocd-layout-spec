@@ -1,0 +1,9 @@
+sources:
+  chart:
+    targetRevision: "2.0.0"
+    properties:
+      debug: null
+  overlay: null
+  library: null
+manifests:
+  properties: null

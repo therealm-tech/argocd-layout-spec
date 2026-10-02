@@ -32,7 +32,7 @@ flowchart TB
     parent["Application layout-&lt;cluster&gt;<br/>one per registered cluster"]
     chart["this Helm chart<br/>templates/"]
     files["catalog/, clusters/, envs/"]
-    child["Application &lt;env&gt;-&lt;instance&gt;-&lt;cluster&gt;<br/>one per instance"]
+    child["Application &lt;env&gt;.&lt;instance&gt;.&lt;cluster&gt;<br/>one per instance"]
     workloads["workloads on &lt;cluster&gt;<br/>cert-manager, grafana, …"]
 
     appset -->|"generates, per cluster"| parent
@@ -40,7 +40,7 @@ flowchart TB
     chart -->|"reads"| files
     chart -->|"emits"| child
     child -->|"renders the app's chart,<br/>values and manifests"| workloads
-    child -.->|"platform-layout-lab-1 deploys"| appset
+    child -.->|"platform.layout.lab-1 deploys"| appset
 ```
 
 1. The **ApplicationSet `layout`** creates one Application `layout-<cluster>`
@@ -52,12 +52,24 @@ flowchart TB
    reads `envs/*/env.yaml`, keeps the environments placed on that cluster, and
    for each of their instances merges the configuration layers.
 3. The chart emits one **Application per instance**, named
-   `<env>-<instance>-<cluster>`. Syncing it deploys the instance: its chart
-   with the merged values, and its manifests with the patches of every layer.
+   `<env>.<instance>.<cluster>`. Syncing it deploys the instance into the
+   namespace `<env>-<instance>`: its chart with the merged values, and its
+   manifests with the patches of every layer.
 
-[templates/](templates/) is the whole chart. A mistake in the layout — an
-undefined property, an instance that resolves to no app — fails the render of
-`layout-<cluster>`, so the error shows in Argo CD before anything is applied.
+The environments split the work. `platform` holds what a cluster needs once,
+whoever uses it: cert-manager and its CRDs, the Traefik ingress controller,
+the layout's own ApplicationSet. `staging` and `prod` hold the applications,
+and can both run Grafana on `lab-1` because each instance gets its own
+namespace and Helm release name.
+
+[templates/](templates/) is the whole chart. When it finds a mistake, the
+render of `layout-<cluster>` fails with a message naming the file and the rule
+of [SPEC.md](../SPEC.md), so the error shows in Argo CD before anything is
+applied. It checks names, orphan files and directories, how each instance
+resolves, the sources, the values files, every manifests directory, the
+properties and their mappings, and that no two instances on a cluster share a
+namespace. What it cannot see — the resources a chart renders — surfaces when
+the instance's own Application renders.
 
 ## Following one instance
 
@@ -78,16 +90,19 @@ them may be missing:
 | placement | [envs/prod/clusters/airgap-1/instances/grafana/](envs/prod/clusters/airgap-1/instances/grafana/) | a `ConfigMap` and values for `prod` on `airgap-1` only |
 
 **Its properties are resolved**, in the same order: the catalog's defaults,
-then `prod`'s, then `airgap-1`'s, then the placement's. `prod` points Docker
-images at a public mirror, but `airgap-1` cannot reach it and points them at
-its Harbor registry; the cluster is more specific than the environment, so
-Harbor wins. The catalog app says where each property lands: the chart's
-registry, a Helm parameter, a field of the `ExternalSecret`.
+then `prod`'s, then `airgap-1`'s, then the placement's. `prod` points
+container images at a public mirror, but `airgap-1` cannot reach it and points
+them at its Harbor registry; the cluster is more specific than the
+environment, so Harbor wins. The catalog app says where each property lands:
+the chart's registry, a Helm parameter, a field of the `ExternalSecret`.
 
-**The Application comes out** as `prod-grafana-airgap-1` in
+**The Application comes out** as `prod.grafana.airgap-1` in
 [rendered/airgap-1.yaml](rendered/airgap-1.yaml):
 
-- the Grafana chart, pulled from the Harbor mirror;
+- the Grafana chart, read from the Harbor mirror. Charts are downloaded by
+  Argo CD's repo-server, which runs on `lab-1`, not by `airgap-1`: the chart
+  registry property matters when an air-gapped cluster runs its own Argo CD,
+  or when the central one must use the mirror too;
 - the values files of every layer, in order, read from this repository;
 - `global.imageRegistry` set to Harbor, and the `ExternalSecret` switched to
   the cluster's secret store;
@@ -117,11 +132,18 @@ helm template layout . --set cluster=lab-1 --set layout.repoURL=https://github.c
 ```
 
 ```sh
-argocd app sync platform-layout-lab-1
+argocd app sync platform.layout.lab-1
 ```
 
-From there the ApplicationSet creates `layout-lab-1` and `layout-airgap-1`,
-which take over the Applications applied by hand.
+The ApplicationSet now exists and creates `layout-lab-1` and
+`layout-airgap-1`. Sync both: `layout-lab-1` takes over the Applications
+applied by hand, and `layout-airgap-1` creates those of `airgap-1`. Then sync
+the instances themselves, `platform` first, since its CRDs are what the others
+build on:
+
+```sh
+argocd app sync layout-lab-1 layout-airgap-1
+```
 
 ## Everyday changes
 
@@ -129,7 +151,8 @@ Each change is a commit, then a sync of `layout-<cluster>` to update the
 Applications, then a sync of the Applications that changed.
 
 - **Install an app in an environment**: add it under `instances:` in the
-  environment's `env.yaml`.
+  environment's `env.yaml`. An app that installs CRDs or other cluster-wide
+  resources goes in `platform`, once per cluster.
 - **Install an app twice**: two instances with the same `app:`, as `ceph-hdd`
   and `ceph-ssd` in [envs/prod/env.yaml](envs/prod/env.yaml).
 - **Skip an instance on one cluster**: list it under that cluster's

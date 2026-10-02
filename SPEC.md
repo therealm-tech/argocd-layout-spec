@@ -24,8 +24,8 @@ environments), namespaces, secrets and AppProjects.
   environment is deployed once per placement.
 - **App**: something installable: a set of sources, their configuration and
   additional manifests.
-- **Catalog**: the set of apps installable in any environment. A layout has
-  exactly one catalog.
+- **Catalog**: the set of apps installable in any environment. A layout has at
+  most one catalog.
 - **Cluster app**: an app defined by a cluster, installable only in the
   environments placed on that cluster.
 - **Instance**: an app installed in an environment, under a name. An app MAY be
@@ -80,8 +80,12 @@ manifests/
    `envs/` only; the roots MAY hold anything else, such as the wiring.
 3. Environment, cluster, app, instance and source names MUST be
    [RFC 1123 labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names).
-4. A cluster is declared by being listed in an `env.yaml`. An instance is
-   declared in its `env.yaml`. An app is declared by its default layer.
+4. An environment is declared by its `env.yaml`. A cluster is declared by its
+   directory under `clusters/` or by being listed in an `env.yaml`. An
+   instance is declared in its `env.yaml`. An app is declared by its default
+   layer. A source of an instance is declared by being named under `sources`
+   in the `app.yaml` of any of the instance's layers, even with a `null`
+   value.
 5. A directory or file that does not match a declared environment, cluster,
    app, instance or source is an error (orphan). Orphans are checked against
    declared names, not against the merged configuration: a values file whose
@@ -139,7 +143,7 @@ sources:
       property: rookCharts
     repository: release
     chart: rook-ceph-cluster
-    targetRevision: v1.20.7
+    targetRevision: v1.20.8
     properties:
       image.registry: imageRegistry
 manifests:
@@ -162,7 +166,7 @@ manifests:
    | `repository` | OPTIONAL; the repository URL is `repoURL`, then `/`, then `repository` |
    | `chart` | the chart name, for a `helm` source from a chart repository |
    | `path` | the path in the repository, for any other source |
-   | `targetRevision` | the chart version or the Git revision |
+   | `targetRevision` | the chart version or the Git revision, as a string: an unquoted `1.10` is the number 1.1 in YAML |
    | `properties` | the property mapping of the source (§9.3) |
 
 3. `repoURL` is either a literal string or a map with a single `property` key
@@ -179,7 +183,10 @@ manifests:
 3. `null` removes the key. `sources.<name>: null` removes a source.
 
 A higher layer MAY change any field of a source, its origin included. The
-configuration of the lower layers still applies to the new origin.
+configuration of the lower layers still applies to the new origin. Since maps
+merge, switching a source between `chart` and `path` sets the other one to
+`null`, and changing its `type` replaces or removes its `properties` mapping,
+whose shape depends on the type (§9.3).
 
 ## 7. Values
 
@@ -194,10 +201,11 @@ configuration of the lower layers still applies to the new origin.
    the components of an instance's layers, in layer order, on an empty base.
    A component in a separate catalog is fetched from the catalog's repository;
    the others MUST be in the same repository as the base.
-2. `kustomization.yaml` lists the files of `resources/` and `patches/`, all of
-   them, and nothing else. It uses no other field: `namespace`, `namePrefix`,
-   `images`, generators and the like change resource identities and are not
-   allowed.
+2. `kustomization.yaml` has `apiVersion`, `kind: Component`, `resources` and
+   `patches`, and no other field: `namespace`, `namePrefix`, `images`,
+   generators and the like change resource identities. `resources` lists every
+   file of `resources/`, and `patches` every file of `patches/`, each as a
+   single `path`.
 3. A file of `resources/` holds exactly one resource and is named after its
    identity.
 4. A file of `patches/` is a strategic merge patch named after the identity of
@@ -208,8 +216,12 @@ configuration of the lower layers still applies to the new origin.
    already present: Kustomize rejects the duplicate before applying patches.
 6. `patches/` targets only the manifests of the layout, never the resources
    rendered from the sources.
-7. An app instantiated several times in one placement MUST NOT have
-   cluster-scoped manifests: every instance would declare the same resource.
+7. A resource whose identity does not depend on the instance exists once per
+   cluster: a cluster-scoped resource, a resource of the layout's manifests
+   that sets its namespace, or a resource a source renders with a fixed name,
+   such as a CRD. An app holding any MUST be instantiated at most once per
+   cluster, all environments included. Operators and other cluster-wide apps
+   therefore usually belong to a single environment per cluster.
 
 ## 9. Properties
 
@@ -234,6 +246,9 @@ configuration of the lower layers still applies to the new origin.
    `directory.jsonnet.extVars` and `directory.jsonnet.tlas`, or
    `kustomize.patches`. Values files and manifests never reference a property.
 3. Referencing an undefined property is an error.
+4. A property keeps its YAML type wherever the target allows it: a string
+   stays a string in a Helm parameter, and a number stays a number in a
+   Kustomize patch.
 
 ### 9.3 Mapping
 
@@ -244,12 +259,13 @@ across layers like the rest of the file; setting an entry to `null` removes it.
 | --- | --- | --- |
 | `sources.<s>.properties` of a `helm` source | a map from Helm parameter name (`image.registry`) to property | `helm.parameters` |
 | `sources.<s>.properties` of a `jsonnet` source | maps `extVars` and `tlas`, each from variable name to property | `directory.jsonnet.extVars`, `directory.jsonnet.tlas` |
-| `sources.<s>.properties` of a `kustomize` source | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` (`op: add`) |
-| `manifests.properties` | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` of the manifests (`op: add`) |
+| `sources.<s>.properties` of a `kustomize` source | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` (`op: replace`) |
+| `manifests.properties` | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` of the manifests (`op: replace`) |
 
 1. A `directory` source takes no mapping.
 2. The resource targeted by `manifests.properties` MUST exist once all layers
-   are applied.
+   are applied, and so MUST the field each JSON pointer designates: the
+   property replaces a value, and never adds one.
 3. A mapped value is applied after every layer: a Helm parameter overrides
    every values file, and a Kustomize patch applies after every component. A
    higher layer that needs to set a mapped field itself removes the mapping
@@ -274,7 +290,8 @@ instances:
 ```
 
 1. `clusters` lists the clusters the environment is placed on.
-   `envs/<e>/clusters/<c>/` exists only for a listed cluster.
+   `envs/<e>/clusters/<c>/` exists only for a listed cluster. A cluster with
+   no `clusters/<c>/` directory is a cluster without specific configuration.
 2. `clusters.<c>.disabled` lists instances not installed on that cluster. Each
    MUST be a declared instance.
 3. `instances` declares the instances of the environment (§4). `app` and
@@ -290,15 +307,17 @@ A conforming layout has none of the following:
    disabled there (§4.5);
 4. a cluster app named like a catalog app (§4.4);
 5. a local instance without `envs/<e>/instances/<i>/app.yaml` (§4.3);
-6. an incomplete source after merge (§6.1.4);
+6. an incomplete source after merge, or a `targetRevision` that is not a
+   string (§6.1);
 7. a values file for a non-`helm` source (§7.1);
-8. a `kustomization.yaml` using a field other than its resources, patches and
-   components (§8.2);
+8. a `kustomization.yaml` that is not a `Component`, uses another field, or
+   does not list exactly the files of `resources/` and `patches/` (§8.2);
 9. a manifest file whose name does not match its identity (§8.3);
-10. a patch whose target is absent (§8.4);
-11. an app with cluster-scoped manifests instantiated several times in one
-    placement (§8.7);
-12. a reference to an undefined property (§9.2.3);
+10. a patch whose target is absent, or a resource added twice (§8.4, §8.5);
+11. an app holding resources of a fixed identity instantiated several times on
+    one cluster (§8.7);
+12. a reference to an undefined property, or a property that is not a scalar
+    (§9.1, §9.2.3);
 13. a mapping on a `directory` source (§9.3.1);
 14. a `manifests.properties` target that does not exist (§9.3.2);
 15. an undeclared instance in `disabled`, or an instance with both `app` and
@@ -308,7 +327,8 @@ The layout does not support:
 
 - two resources of one app with the same identity;
 - resources whose name contains `_`, since `_` separates the namespace in an
-  identity;
+  identity, and resources whose name contains a character a file name cannot
+  hold on the platforms in use, such as `:` on Windows;
 - properties that are part of a value, other than a `repoURL`;
 - patches on resources rendered from a source.
 
@@ -325,15 +345,25 @@ This section is informative. A layout can be assembled by Argo CD alone:
    file reads as empty), merges `app.yaml` and the properties, and fails the
    render on any error of §11 it can detect.
 4. It emits one Application per instance and placement: the merged sources,
-   the values files of every layer through `ref` sources, the Helm parameters,
+   each with its tool set explicitly so that Argo CD never guesses it, the
+   values files of every layer through `ref` sources, the Helm parameters,
    Jsonnet variables and Kustomize patches of the mapping, and the manifest
    components of every layer on the empty base.
-5. A separate catalog is a Helm chart too, published at a version and tagged
-   with it in Git. The layout chart declares it as a dependency and reads its
-   files through `.Subcharts`; the generated Applications fetch its values
-   files through a `ref` source and its manifests as remote Kustomize
-   components, both at the tag of that version. Upgrading the catalog is
-   bumping the dependency.
+5. It names what it emits so that nothing collides: the Application
+   `<env>.<instance>.<cluster>` (`.` cannot appear in a name of the layout),
+   and the destination namespace and Helm release `<env>-<instance>`, checked
+   unique on the cluster and no longer than the 53 characters of a release
+   name. Names a chart derives from its release, such as its ClusterRoles,
+   are then unique too; only the fixed identities of §8.7 can collide.
+6. A separate catalog is a Helm chart too, published at a version and tagged
+   `v<version>` in Git. Its `Chart.yaml` names the Git repository in
+   `sources`, and the catalog's directory there in a `layout/catalog-path`
+   annotation when it is not the root. The layout chart declares it as a
+   dependency and reads its files through `.Subcharts`; the generated
+   Applications fetch its values files through a `ref` source and its
+   manifests as remote Kustomize components, both at that tag. Upgrading the
+   catalog is bumping the dependency. Nothing but this convention ties the
+   package to the tag: they are published together, from the same commit.
 
 Everything is rendered by Helm and Kustomize; no plugin is involved.
 [examples/](examples/) implements this wiring with its catalog alongside, and

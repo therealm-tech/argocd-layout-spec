@@ -3,3 +3,8 @@ toolbox:
 cephClusterSpec:
   mon:
     count: 3
+# The chart's default pools create StorageClasses with fixed names, which two
+# instances on one cluster would both claim; each instance declares its own.
+cephBlockPools: []
+cephFileSystems: []
+cephObjectStores: []

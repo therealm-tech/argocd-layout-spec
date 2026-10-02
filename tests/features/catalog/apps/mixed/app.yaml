@@ -1,0 +1,39 @@
+sources:
+  chart:
+    type: helm
+    repoURL:
+      property: registry
+    repository: charts
+    chart: mixed
+    targetRevision: "1.10"
+    properties:
+      image.registry: registry
+      replicaCount: replicas
+      debug: debug
+  overlay:
+    type: kustomize
+    repoURL: https://git.example.com/overlay
+    path: deploy
+    targetRevision: main
+    properties:
+      apps/Deployment/overlay:
+        /spec/replicas: replicas
+  library:
+    type: jsonnet
+    repoURL: https://git.example.com/library
+    path: jsonnet
+    targetRevision: main
+    properties:
+      extVars:
+        api: apiURL
+      tlas:
+        debug: debug
+  raw:
+    type: directory
+    repoURL: https://git.example.com/raw
+    path: manifests
+    targetRevision: main
+manifests:
+  properties:
+    core/ConfigMap/settings:
+      /data/api: apiURL

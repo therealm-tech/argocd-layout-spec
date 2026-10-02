@@ -1,0 +1,6 @@
+sources:
+  chart:
+    type: kustomize
+    repoURL: example.com/charts
+    path: deploy
+    targetRevision: "1.0.0"

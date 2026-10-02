@@ -1,1 +1,1 @@
-envs/dev/env.yaml: disabled instance "ghost" is not declared
+envs/dev/env.yaml: instance "ghost" disabled on lab-1 is not declared

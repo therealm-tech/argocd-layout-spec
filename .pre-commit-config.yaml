@@ -26,7 +26,7 @@ repos:
         args:
           - --strict
         # Go templates, and Helm's own multi-document output.
-        exclude: ^examples(-confidential)?/(templates|rendered)/
+        exclude: (^examples(-confidential)?/templates/|(^|/)rendered/)
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12

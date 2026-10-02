@@ -1,6 +1,6 @@
 quayCharts: harbor.airgap.internal/quay.io
 ghcrCharts: harbor.airgap.internal/ghcr.io
-rookCharts: https://harbor.airgap.internal/chartrepo/rook
+rookCharts: harbor.airgap.internal/charts.rook.io
 quayImages: harbor.airgap.internal/quay.io
 dockerImages: harbor.airgap.internal/docker.io
 secretStore: aws-secrets-manager

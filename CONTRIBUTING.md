@@ -26,10 +26,19 @@ tests/render.sh
 ```
 
 It renders each example layout, [examples/](examples/) and
-[examples-confidential/](examples-confidential/), for every one of its clusters
-into the layout's `rendered/` directory, which Git ignores, then renders each
-broken layout under [tests/errors/](tests/errors/) and checks it fails with the
-message in its `expected-error` file.
+[examples-confidential/](examples-confidential/), for every one of its
+clusters, and [tests/features/](tests/features/), a layout exercising every
+kind of mapping and `null` removal, and compares each result with the
+`rendered/` directory next to it. It then renders each broken layout under
+[tests/errors/](tests/errors/) and checks it fails with the message in its
+`expected-error` file.
+
+A change to the chart or to a layout that changes its output regenerates the
+expected output, and the diff is reviewed with the change:
+
+```sh
+tests/render.sh --update
+```
 
 A new error the chart detects gets a directory under `tests/errors/`: the
 files of a minimal layout, plus `expected-error`.
