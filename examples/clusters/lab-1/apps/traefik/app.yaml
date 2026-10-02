@@ -6,4 +6,4 @@ sources:
     repository: traefik/helm
     chart: traefik
     releaseName: traefik
-    targetRevision: 41.6.0
+    targetRevision: "41.6.0"

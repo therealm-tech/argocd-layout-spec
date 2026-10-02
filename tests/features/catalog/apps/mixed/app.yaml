@@ -10,6 +10,7 @@ sources:
       image.registry: registry
       replicaCount: replicas
       debug: debug
+      resources.limits.bytes: bigNumber
   overlay:
     type: kustomize
     repoURL: https://git.example.com/overlay
@@ -33,6 +34,7 @@ sources:
     repoURL: registry.example.com/charts
     chart: addon
     targetRevision: "0.3.0"
+    releaseName: addon
   raw:
     type: directory
     repoURL: https://git.example.com/raw

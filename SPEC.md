@@ -104,7 +104,7 @@ manifests/
 3. An instance refers to its app by one of:
    - `app: <app>`: a catalog app or a cluster app;
    - `local: true`: a local instance, whose app is defined in
-     `instances/<instance>/`;
+     `instances/<instance>/`, where `app.yaml` MUST exist;
    - nothing: the app named like the instance.
 4. A cluster app MUST NOT have the name of a catalog app. Two clusters MAY
    each define a cluster app of the same name: an instance referring to that
@@ -198,9 +198,12 @@ data must survive first pins both in its environment layer.
 
 A higher layer MAY change any field of a source, its origin included. The
 configuration of the lower layers still applies to the new origin. Since maps
-merge, switching a source between `chart` and `path` sets the other one to
-`null`, and changing its `type` replaces or removes its `properties` mapping,
-whose shape depends on the type (§9.3).
+merge, a layer changing a source's nature also sets to `null` what no longer
+fits: `chart` or `path`, a `repository` meant for the old origin, a
+`releaseName` when it is no longer `helm`, and the `properties` mapping, whose
+shape depends on the type (§9.3). Lists replace: a layer giving
+`application.syncOptions` or `application.ignoreDifferences` restates the
+entries of the layers below that it keeps.
 
 ### 6.3 Application settings
 
@@ -209,7 +212,7 @@ deploys the instance, merged across layers like the rest of the file:
 
 | Field | Content |
 | --- | --- |
-| `syncOptions` | Argo CD sync options added to the wiring's own, such as `ServerSideApply=true` for CRDs too large for a client-side apply |
+| `syncOptions` | Argo CD sync options, such as `ServerSideApply=true` for CRDs too large for a client-side apply; an option replaces the wiring's option of the same name |
 | `ignoreDifferences` | Argo CD `ignoreDifferences` entries, for fields a controller rewrites after the sync, such as injected CA bundles |
 
 No other field is allowed: when and how an Application syncs is operations.
@@ -217,7 +220,9 @@ No other field is allowed: when and how an Application syncs is operations.
 ## 7. Values
 
 1. `values/<source>.yaml` holds the Helm values of the source `<source>`. It
-   exists only for a `helm` source.
+   exists only in a layer where the source, as merged up to that layer, is a
+   `helm` source. A higher layer that changes the source's type leaves it
+   unused.
 2. The values files of a source are passed to Helm in layer order, lowest
    first. They merge by Helm's own rules.
 
@@ -248,8 +253,8 @@ No other field is allowed: when and how an Application syncs is operations.
    rendered from the sources.
 7. A resource whose identity does not depend on the instance exists once per
    cluster: a cluster-scoped resource, a resource of the layout's manifests
-   that sets its namespace, or a resource a source renders with a fixed name,
-   such as a CRD. At most one instance per cluster, all environments included,
+   that sets its namespace or that goes to a namespace `namespace` sets, or a
+   resource a source renders with a fixed name, such as a CRD. At most one instance per cluster, all environments included,
    MAY keep such a resource once its layers are applied; an instance whose
    layers delete it does not count. Operators and other cluster-wide apps
    therefore usually belong to a single environment per cluster.
@@ -346,7 +351,7 @@ A conforming layout has none of the following:
 6. an incomplete source after merge, a `targetRevision` that is not a string,
    a property in a field other than `repoURL`, or a `chart` or `releaseName`
    on a source that is not `helm` (§6.1);
-7. a values file for a non-`helm` source (§7.1);
+7. a values file in a layer where its source is not `helm` (§7.1);
 8. a `kustomization.yaml` that is not a `Component`, uses another field, or
    does not list exactly the files of `resources/` and `patches/` (§8.2);
 9. a manifest file whose name does not match its identity, or that holds more
@@ -390,6 +395,8 @@ This section is informative. A layout can be assembled by Argo CD alone:
    keys in a YAML file, a JSON pointer naming a missing field (§9.3.2), nor
    the resources §8.7 describes when they are cluster-scoped or rendered by a
    source; those surface when the instance's Application renders or syncs.
+   It cannot see a file no rendered cluster reads either, such as an
+   environment placed nowhere, or one whose `env.yaml` is misnamed.
 4. It emits one Application per instance and placement: the merged sources,
    each with its tool set explicitly so that Argo CD never guesses it, the
    values files of every layer through `ref` sources, the Helm parameters,
@@ -398,8 +405,9 @@ This section is informative. A layout can be assembled by Argo CD alone:
 5. It names what it emits so that nothing collides: the Application
    `<env>.<instance>.<cluster>` (`.` cannot appear in a name of the layout).
    An instance without `namespace` goes to `<env>-<instance>`, and a Helm
-   source without `releaseName` is released as `<env>-<instance>`, or
-   `<env>-<instance>-<source>` when the app has several Helm sources. Names
+   source without `releaseName` is released as `<env>-<instance>`, whatever
+   the number of Helm sources: adding a source never renames another one's
+   release, and an app with several Helm sources names them. Names
    a chart derives from its release, such as its ClusterRoles, are then
    unique across environments. Two instances installing the same release in
    the same namespace of a cluster fail the render, and so does a release
@@ -407,8 +415,8 @@ This section is informative. A layout can be assembled by Argo CD alone:
 6. The Application names it emits need Argo CD 3.0 or later, whose default
    annotation-based resource tracking takes names longer than a label's 63
    characters. A Helm source whose repository URL has no scheme is an OCI
-   registry, which Argo CD reaches through a repository registered with OCI
-   enabled. The layout's own directories, `catalog/`, `clusters/` and
+   registry, which Argo CD reaches through a repository or a credential
+   template registered with OCI enabled and matching that URL. The layout's own directories, `catalog/`, `clusters/` and
    `envs/`, never collide with the names Helm reserves at a chart's root.
 7. A separate catalog is a Helm chart too, published at a version and tagged
    `v<version>` in Git. Its `Chart.yaml` names the Git repository in

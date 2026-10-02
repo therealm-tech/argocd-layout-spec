@@ -3,9 +3,9 @@ sources:
     type: helm
     repoURL:
       property: ghcrCharts
-    repository: grafana/helm-charts
+    repository: grafana-community/helm-charts
     chart: grafana
-    targetRevision: 10.5.15
+    targetRevision: "13.2.7"
     properties:
       global.imageRegistry: dockerImages
 manifests:

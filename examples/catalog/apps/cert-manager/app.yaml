@@ -7,6 +7,6 @@ sources:
     repository: jetstack/charts
     chart: cert-manager
     releaseName: cert-manager
-    targetRevision: v1.21.2
+    targetRevision: "v1.21.2"
     properties:
       imageRegistry: quayImages

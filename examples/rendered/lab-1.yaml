@@ -264,9 +264,9 @@ spec:
     name: lab-1
     namespace: prod-grafana
   sources:
-    - repoURL: ghcr.io/grafana/helm-charts
+    - repoURL: ghcr.io/grafana-community/helm-charts
       chart: grafana
-      targetRevision: "10.5.15"
+      targetRevision: "13.2.7"
       helm:
         releaseName: prod-grafana
         valueFiles:
@@ -274,7 +274,7 @@ spec:
           - $layout/examples/envs/prod/instances/grafana/values/chart.yaml
         parameters:
           - name: global.imageRegistry
-            value: "mirror.gcr.io"
+            value: "docker-cache.example.com"
             forceString: true
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
       targetRevision: "HEAD"
@@ -318,9 +318,9 @@ spec:
     name: lab-1
     namespace: staging-grafana
   sources:
-    - repoURL: ghcr.io/grafana/helm-charts
+    - repoURL: ghcr.io/grafana-community/helm-charts
       chart: grafana
-      targetRevision: "10.5.15"
+      targetRevision: "13.2.7"
       helm:
         releaseName: staging-grafana
         valueFiles:

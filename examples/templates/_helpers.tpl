@@ -287,11 +287,25 @@ it has manifests.
 {{- if not $hasManifests -}}
 {{- fail (printf "%s: %s/manifests/ has no kustomization.yaml (SPEC §8.1)" $file $layer) -}}
 {{- end -}}
-{{- else if not (or (eq $rel "app.yaml") (regexMatch "^values/[^/]+\\.yaml$" $rel)) -}}
+{{- else if regexMatch "^values/[^/]+\\.yaml$" $rel -}}
+{{- $source := trimSuffix ".yaml" (trimPrefix "values/" $rel) -}}
+{{- if and (kindIs "slice" $.declared) (not (has $source $.declared)) -}}
+{{- fail (printf "%s: no app.yaml of this app declares a source %q (SPEC §3.5)" $file $source) -}}
+{{- end -}}
+{{- else if ne $rel "app.yaml" -}}
 {{- fail (printf "%s: matches nothing the layout defines (SPEC §3.5)" $file) -}}
 {{- end -}}
 {{- end -}}
 {{- if $hasManifests -}}
 {{- $_ := include "layout.manifests" (merge (dict "layer" $layer) $io) -}}
+{{- end -}}
+{{- end -}}
+
+{{/* A scalar as a string, integers without the scientific notation of float64. */}}
+{{- define "layout.scalar" -}}
+{{- if and (kindIs "float64" .) (eq (floor .) .) -}}
+{{- printf "%d" (int64 .) -}}
+{{- else -}}
+{{- toString . -}}
 {{- end -}}
 {{- end -}}

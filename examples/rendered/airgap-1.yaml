@@ -211,9 +211,9 @@ spec:
     name: airgap-1
     namespace: prod-grafana
   sources:
-    - repoURL: harbor.airgap.internal/ghcr.io/grafana/helm-charts
+    - repoURL: harbor.airgap.internal/ghcr.io/grafana-community/helm-charts
       chart: grafana
-      targetRevision: "10.5.15"
+      targetRevision: "13.2.7"
       helm:
         releaseName: prod-grafana
         valueFiles:

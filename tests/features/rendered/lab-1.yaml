@@ -16,12 +16,12 @@ spec:
       chart: addon
       targetRevision: "0.3.0"
       helm:
-        releaseName: dev-mixed-addon
+        releaseName: addon
     - repoURL: registry.example.com/charts
       chart: mixed
       targetRevision: "1.10"
       helm:
-        releaseName: dev-mixed-chart
+        releaseName: dev-mixed
         valueFiles:
           - $layout/examples/catalog/apps/mixed/values/chart.yaml
         parameters:
@@ -32,6 +32,8 @@ spec:
             forceString: true
           - name: replicaCount
             value: "2"
+          - name: resources.limits.bytes
+            value: "12345678"
     - repoURL: https://git.example.com/library
       path: jsonnet
       targetRevision: "main"
@@ -100,6 +102,52 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: dev.switched.lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: dev-switched
+  sources:
+    - repoURL: https://git.example.com/mixed
+      path: deploy
+      targetRevision: "main"
+      kustomize: {}
+    - repoURL: https://git.example.com/raw
+      path: manifests
+      targetRevision: "main"
+      directory: {}
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/mixed/manifests
+          - ../envs/dev/instances/switched/manifests
+          - ../clusters/lab-1/overrides/mixed/manifests
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=false
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      jqPathExpressions:
+      - .webhooks[].clientConfig.caBundle
+      kind: ValidatingWebhookConfiguration
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: dev.trimmed.lab-1
   namespace: argocd
 spec:
@@ -122,6 +170,8 @@ spec:
             forceString: true
           - name: replicaCount
             value: "2"
+          - name: resources.limits.bytes
+            value: "12345678"
     - repoURL: https://git.example.com/raw
       path: manifests
       targetRevision: "main"

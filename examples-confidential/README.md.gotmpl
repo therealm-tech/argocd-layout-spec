@@ -42,7 +42,9 @@ flowchart LR
   certificate issuer proves domain ownership through Route 53 DNS. A second
   AWS cluster repeats `clusters/aws-1/`: properties and overrides are per
   cluster, and nothing groups clusters. In `env.yaml`, it disables `layout`,
-  which runs only where Argo CD does.
+  which runs only where Argo CD does. The AWS store and the Route 53 issuer
+  also need AWS permissions for their service accounts (IRSA or EKS Pod
+  Identity), which this layout does not set up.
 - **The wiring is the same chart** as in [examples/](../examples/), shared
   through symbolic links. A real private repository would copy
   [templates/](templates/), or take them from a Helm library chart whose

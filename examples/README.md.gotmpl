@@ -139,7 +139,7 @@ application:                   # settings of the Argo CD Application
   ignoreDifferences: []
 ```
 
-Three things to know about them:
+Four things to know about them:
 
 - **A property wins over the values files.** `global.imageRegistry` above is
   set from `dockerImages` after every values file is read, so writing it in a
@@ -151,6 +151,9 @@ Three things to know about them:
   give it a default in [catalog/properties.yaml](catalog/properties.yaml).
 - **`null` removes.** In any layer, `<field>: null` deletes what the layers
   below set, a whole source included.
+- **Maps merge, lists replace.** A layer that writes `application.syncOptions`
+  or `ignoreDifferences` replaces the whole list of the layers below: it
+  repeats the entries it keeps.
 
 ## How the pieces fit
 
@@ -223,7 +226,7 @@ field: it is the catalog app of the same name.
 **Its properties are resolved**, in the same order: the catalog's
 [defaults](catalog/properties.yaml), then [`prod`'s](envs/prod/properties.yaml),
 then [`airgap-1`'s](clusters/airgap-1/properties.yaml). `prod` points container
-images at a public mirror, but `airgap-1` cannot reach it and points them at
+images at the company's Docker Hub cache, but `airgap-1` cannot reach it and points them at
 its Harbor registry; the cluster is more specific than the environment, so
 Harbor wins. The app's [app.yaml](catalog/apps/grafana/app.yaml) says where
 each property lands: the chart's registry, a Helm parameter, a field of the
@@ -240,7 +243,9 @@ each property lands: the chart's registry, a Helm parameter, a field of the
   to pull every public registry through Harbor, so an image no property
   rewrites still arrives; Grafana's and cert-manager's are rewritten
   explicitly, which is how a cluster without such node mirrors would do it;
-- the values files of every layer, in order, read from this repository;
+- the values files of every layer, in order, read from this repository. They
+  appear as `$layout/…`: `$layout` names the Application's source that lends
+  this repository's files, the one carrying `ref: layout`;
 - `global.imageRegistry` set to Harbor, and the `ExternalSecret` reading from
   the cluster's secret store;
 - the manifests of every layer stacked on [base/](base/), an empty Kustomize
@@ -253,16 +258,17 @@ in to it (`argocd login`), and `kubectl` pointed at `lab-1`. Argo CD on
 `lab-1` must reach the API server of `airgap-1` and the mirrors `airgap-1`
 uses: it renders and applies everything from there.
 
-Register the OCI registries the charts come from, so that Argo CD reads a
-`repoURL` without `https://` as one (on `airgap-1`'s side, the Harbor
-paths):
+Charts whose `repoURL` has no `https://` come from OCI registries, the
+container-image protocol that registries also use for Helm charts. Tell
+Argo CD so with a credential template per registry, which covers every chart
+path under it (and the same for the Harbor paths `airgap-1` uses):
 
 ```sh
-argocd repo add quay.io --type helm --enable-oci --name quay
+argocd repocreds add quay.io --type helm --enable-oci
 ```
 
 ```sh
-argocd repo add ghcr.io --type helm --enable-oci --name ghcr
+argocd repocreds add ghcr.io --type helm --enable-oci
 ```
 
 Register every cluster under its name in the layout, including the one
@@ -289,8 +295,9 @@ argocd app sync platform.layout.lab-1
 ```
 
 The ApplicationSet now exists and creates `layout-lab-1` and
-`layout-airgap-1`. Sync both: `layout-lab-1` takes over the Applications
-applied by hand, and `layout-airgap-1` creates those of `airgap-1`:
+`layout-airgap-1`. Sync both: `layout-lab-1` becomes the owner of the
+Applications applied by hand — Argo CD then updates and deletes them with it —
+and `layout-airgap-1` creates those of `airgap-1`:
 
 ```sh
 argocd app sync layout-lab-1 layout-airgap-1
@@ -306,23 +313,33 @@ argocd app sync platform.cert-manager.lab-1 platform.external-secrets.lab-1 plat
 
 ## Everyday changes
 
-Each change is a commit, then a sync of `layout-<cluster>` to update the
-Applications, then a sync of the Applications that changed.
+Every change is a commit; Argo CD notices it within a few minutes, or at once
+with a webhook or the Refresh button. What to sync then depends on what
+changed:
 
-- **Install an app in an environment**: add it under `instances:` in the
-  environment's `env.yaml`. An app that installs CRDs or other cluster-wide
-  objects goes in `platform`, once per cluster.
-- **Install an app twice**: two instances with the same `app:`, as `ceph-hdd`
-  and `ceph-ssd` in [envs/prod/env.yaml](envs/prod/env.yaml). Whatever the
-  chart names without its release name, such as Rook's StorageClasses, must
-  differ between the two: see their values files.
-- **Skip an instance on one cluster**: list it under that cluster's
-  `disabled:` in `env.yaml`.
-- **Change a value everywhere, for one environment, one cluster, or one
-  environment on one cluster**: edit `values/<source>.yaml` in the matching
-  layer.
-- **Change what a cluster can reach** (a registry, a Vault): edit its
-  `clusters/<cluster>/properties.yaml`.
+- **The content of a values file or of a manifest** that already exists: only
+  the Applications of the instances using it turn OutOfSync. Sync them.
+- **Anything else** — an `env.yaml`, an `app.yaml`, a properties file, or a
+  values file or `manifests/` directory added or removed — changes the
+  Applications themselves: sync `layout-<cluster>` first, then the instances
+  it shows as changed.
+
+The recipes, with the file each one touches:
+
+| To | Edit | Rule that applies |
+| --- | --- | --- |
+| install an app in an environment | `instances:` in `envs/<env>/env.yaml` | an app that installs CRDs or other cluster-wide objects goes in `platform`, once per cluster |
+| install an app twice | two entries with the same `app:` in `env.yaml` | whatever the chart names without its release name, such as Rook's StorageClasses, must differ: see `ceph-hdd` and `ceph-ssd` |
+| skip an instance on one cluster | `disabled:` under that cluster in `env.yaml` | |
+| change a Helm value | `values/<source>.yaml` in the layer that matches the scope: default, environment, cluster or placement | maps merge, lists replace; a mapped property wins over the file |
+| change a chart version | `targetRevision` in the `app.yaml` of the matching layer | quoted |
+| change what a cluster can reach (a registry, a Vault) | `clusters/<cluster>/properties.yaml` | every property used must keep a value for every placement |
+| add, change or remove a Kubernetes object | `manifests/` of the matching layer: `resources/` to add, `patches/` to change or delete | the file is named after the object; a patch on a custom resource replaces its lists whole |
+| add an Argo CD sync option or ignored difference | `application:` in the matching `app.yaml` | lists replace: repeat the entries of the layers below |
+| share a local app with another environment | move `envs/<env>/instances/<instance>/` to `catalog/apps/<app>/`, and drop `local: true` | |
+
+Three changes need more care:
+
 - **Add a cluster**: register it in Argo CD, create `clusters/<cluster>/` if
   it needs anything specific, and list it under `clusters:` in the
   environments placed on it. Disable there the instances it cannot run: the
@@ -335,8 +352,9 @@ Applications, then a sync of the Applications that changed.
   `releaseName: prod-ceph-ssd` under the source), then rename.
 - **Remove an instance**: delete its workloads first, with
   `argocd app delete <env>.<instance>.<cluster> --cascade`, then remove it
-  from `env.yaml`. Removing it first only deletes its Application, when
-  `layout-<cluster>` is synced with pruning, and leaves its workloads running.
+  from `env.yaml`. The other way round, syncing `layout-<cluster>` with
+  pruning — deleting what is no longer in Git — removes only its Application,
+  and leaves its workloads running.
 
 [examples-confidential/](../examples-confidential/) is a second layout, with
 its own environments and clusters, that uses this catalog from another

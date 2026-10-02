@@ -12,9 +12,9 @@ spec:
     name: aws-1
     namespace: acme-grafana
   sources:
-    - repoURL: ghcr.io/grafana/helm-charts
+    - repoURL: ghcr.io/grafana-community/helm-charts
       chart: grafana
-      targetRevision: "10.5.15"
+      targetRevision: "13.2.7"
       helm:
         releaseName: acme-grafana
         valueFiles:

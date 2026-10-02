@@ -1,0 +1,18 @@
+namespace: dev-switched
+sources:
+  chart:
+    type: kustomize
+    repoURL: https://git.example.com/mixed
+    repository: null
+    chart: null
+    path: deploy
+    targetRevision: main
+    releaseName: null
+    properties: null
+  addon: null
+  library: null
+  overlay: null
+manifests: null
+application:
+  syncOptions:
+    - CreateNamespace=false

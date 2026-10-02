@@ -1,4 +1,5 @@
 registry: registry.example.com
 replicas: 2
+bigNumber: 12345678
 debug: true
 apiURL: https://api.example.com
