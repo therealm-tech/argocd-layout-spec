@@ -79,7 +79,8 @@ is enough to find one:
 - objects of the core API (`apiVersion: v1`: ConfigMap, Secret…) use `core`
   as their group, as in
   [core/ConfigMap/grafana-airgap.yaml](envs/prod/clusters/airgap-1/instances/grafana/manifests/resources/core/ConfigMap/grafana-airgap.yaml);
-- an object that sets its own namespace gets it after an underscore, as the
+- an object that sets its own namespace gets it after an underscore — it then
+  lands there, whatever the instance's namespace, `default` included — as the
   ApplicationSet
   [ApplicationSet/layout_argocd.yaml](catalog/apps/layout/manifests/resources/argoproj.io/ApplicationSet/layout_argocd.yaml),
   which lives in `argocd`;
@@ -188,8 +189,18 @@ registry, a Vault — is a fact about the cluster. A property only reaches the
 apps whose `app.yaml` maps it: changing one changes nothing for an app that
 does not ask for it.
 
-Some objects exist once per cluster and serve every environment on it, such
-as the `ClusterSecretStore` external-secrets uses. One environment that needs
+Properties are not per instance. To give two instances of one environment
+different values, either map the field to another property name in one
+instance's `app.yaml`, or remove the mapping there (`<parameter>: null`) and
+set the value in its `values/` file. A chart that pulls images from several
+registries needs one mapped parameter per registry: a single registry
+parameter would point every image at the same place.
+
+An app installed once per cluster, in `platform`, cannot differ per
+environment either: Traefik's version on `lab-1` is the same for `staging`
+and `prod`, since both use the one Traefik. Some objects exist once per
+cluster and serve every environment on it too, such as the
+`ClusterSecretStore` external-secrets uses. One environment that needs
 a different variant does not change it: it adds a second object next to it,
 in the cluster layer of the app that owns it
 (`clusters/<cluster>/overrides/<app>/manifests/`), and points its own apps at
@@ -389,7 +400,17 @@ there.
 A synced Application whose objects differ from Git again is **OutOfSync**:
 that is what a sync clears.
 
-Three changes need more care:
+Four changes need more care:
+
+- **Add a cluster-wide operator** (kube-prometheus-stack, an ingress
+  controller, a storage operator): a catalog app with its usual `namespace`
+  and a fixed `releaseName`; `ServerSideApply=true` if its CRDs exceed
+  256 KiB; an `ignoreDifferences` entry for every webhook configuration —
+  Validating and Mutating — whose CA bundle a controller injects; one mapped
+  registry parameter per image registry it pulls from; then an instance in
+  `platform`, disabled on the clusters that cannot run it. A layout that
+  consumes the catalog from another repository sees it after the next catalog
+  release and a dependency bump.
 
 - **Add a cluster**: register it in Argo CD, create `clusters/<cluster>/` if
   it needs anything specific, and list it under `clusters:` in the

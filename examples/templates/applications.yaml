@@ -240,6 +240,11 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- if hasKey $present $resource.identity -}}
 {{- fail (printf "%s: %s adds %s, which a lower layer already has (SPEC §8.5)" $context $layer $resource.identity) -}}
 {{- end -}}
+{{- /* Kustomize does not tell namespace "default" apart from none. */ -}}
+{{- $twin := ternary (trimSuffix "_default" $resource.identity) (printf "%s_default" $resource.identity) (hasSuffix "_default" $resource.identity) -}}
+{{- if hasKey $present $twin -}}
+{{- fail (printf "%s: %s adds %s next to %s, one object to Kustomize, which treats namespace default as none (SPEC §8.3)" $context $layer $resource.identity $twin) -}}
+{{- end -}}
 {{- $_ := set $present $resource.identity $resource.apiVersion -}}
 {{- end -}}
 {{- range $patch := $m.patches -}}

@@ -1,0 +1,7 @@
+---  # a separator with a comment, and a trailing one
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-info
+  namespace: default
+---

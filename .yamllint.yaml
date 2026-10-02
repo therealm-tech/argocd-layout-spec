@@ -6,6 +6,7 @@ rules:
     # A test layout holding two documents in one file, on purpose.
     ignore: |
       tests/errors/multi-document-manifest/
+      tests/features/catalog/apps/storage/manifests/resources/core/ConfigMap/storage-info_default.yaml
   braces:
     forbid: non-empty
   brackets:

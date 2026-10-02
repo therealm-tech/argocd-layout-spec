@@ -80,7 +80,16 @@ true
 {{- /* fromYaml reports a parse error as a map holding only `Error`, which a
    file may legitimately hold too: a probe key added to the content tells the
    two apart. */ -}}
-{{- $content := printf "%s\n__layout_probe__: true\n" (include "layout.read" .) | fromYaml -}}
+{{- $documents := list -}}
+{{- range $document := regexSplit "(?m)^---([ \\t].*)?$" (include "layout.read" .) -1 -}}
+{{- if regexMatch "(?m)^[^#\\s]" $document -}}
+{{- $documents = append $documents $document -}}
+{{- end -}}
+{{- end -}}
+{{- if gt (len $documents) 1 -}}
+{{- fail (printf "%s: holds %d YAML documents instead of one" .path (len $documents)) -}}
+{{- end -}}
+{{- $content := printf "%s\n__layout_probe__: true\n" (first $documents | default "") | fromYaml -}}
 {{- if not (hasKey $content "__layout_probe__") -}}
 {{- fail (printf "%s: %s" .path $content.Error) -}}
 {{- end -}}
@@ -172,7 +181,7 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- fail (printf "%s: lists %s, which does not exist" $kustomization $file) -}}
 {{- end -}}
 {{- $documents := 0 -}}
-{{- range $document := regexSplit "(?m)^---[ \t]*$" (include "layout.read" (merge (dict "path" $file) $io)) -1 -}}
+{{- range $document := regexSplit "(?m)^---([ \\t].*)?$" (include "layout.read" (merge (dict "path" $file) $io)) -1 -}}
 {{- if regexMatch "(?m)^[^#\\s]" $document -}}
 {{- $documents = add1 $documents -}}
 {{- end -}}
@@ -182,9 +191,7 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- end -}}
 {{- $obj := include "layout.parse" (merge (dict "path" $file) $io) | fromJson -}}
 {{- $identity := include "layout.identity" (dict "obj" $obj "context" $file) -}}
-{{- if eq (toString ($obj.metadata | default (dict)).namespace) "default" -}}
-{{- fail (printf "%s: sets namespace default, which Kustomize does not tell apart from none; leave it out (SPEC §8.3)" $file) -}}
-{{- end -}}
+
 {{- $kind := ternary "resources" "patches" (hasPrefix (printf "%s/resources/" $dir) $file) -}}
 {{- if ne $file (printf "%s/%s/%s.yaml" $dir $kind $identity) -}}
 {{- fail (printf "%s: must be named %s/%s.yaml after its content (SPEC §8.3)" $file $kind $identity) -}}

@@ -24,7 +24,7 @@ layout's business.
   An environment spans one or more clusters.
 - **Cluster**: a Kubernetes cluster. A cluster hosts one or more environments.
 - **Placement**: an environment on one of its clusters. Every instance of the
-  environment is deployed once per placement.
+  environment not disabled on that cluster is deployed once per placement.
 - **App**: something installable: a set of sources, their configuration and
   additional manifests.
 - **Catalog**: the set of apps installable in any environment. A layout has at
@@ -132,7 +132,11 @@ precedence. Each higher layer is applied on top of the ones below.
    app's default layer, or a local instance's environment layer.
 2. The cluster layer is keyed by app and applies to every instance of that app
    on the cluster, over their environment layers. What must differ between two
-   instances on one cluster belongs in the placement layer.
+   instances on one cluster belongs in the placement layer. So does what one
+   environment changes and the cluster layer relies on: when an environment
+   removes a source or a resource, or changes a source's type, a cluster layer
+   that configures it no longer fits that instance, and the change is made
+   per placement instead.
 3. A cluster app has no cluster layer: its definition is its default layer.
    `clusters/<c>/overrides/<app>/` for a cluster app of `<c>` is an orphan.
 4. There is no inheritance between environments: an environment reads only
@@ -249,9 +253,9 @@ difference.
    file of `resources/`, and `patches` every file of `patches/`, each as a
    single `path`.
 3. A file of `resources/` holds exactly one resource, in a single YAML
-   document, and is named after its identity. A resource MUST NOT set
-   `metadata.namespace: default`: Kustomize does not tell it apart from a
-   resource that sets none, so two identities would name one resource.
+   document, and is named after its identity. Kustomize does not tell
+   `metadata.namespace: default` apart from no namespace: an instance's
+   layers MUST NOT hold both `<identity>` and `<identity>_default`.
 4. A file of `patches/` is a strategic merge patch named after the identity of
    its target. The target MUST be present once the lower layers and the
    resources of the patch's own layer are applied, and the patch MUST carry
@@ -266,8 +270,9 @@ difference.
    rendered from the sources.
 7. Two instances on one cluster, all environments included, MUST NOT deploy
    the same resource, identified by its identity (§2) and the namespace it
-   lands in: its own, or else the instance's. An instance whose layers delete
-   a resource does not deploy it. This bites whatever does not depend on the
+   lands in: its own, or else the instance's. A cluster-scoped resource lands
+   in no namespace, so it collides across all instances. An instance whose
+   layers delete a resource does not deploy it. This bites whatever does not depend on the
    instance: a cluster-scoped resource, a resource that sets its namespace or
    lands in a namespace `namespace` names, or a resource a source renders
    with a fixed name, such as a CRD. Operators and other cluster-wide apps
@@ -313,7 +318,7 @@ across layers like the rest of the file; setting an entry to `null` removes it.
 | --- | --- | --- |
 | `sources.<s>.properties` of a `helm` source | a map from Helm parameter name (`image.registry`) to property | `helm.parameters` |
 | `sources.<s>.properties` of a `jsonnet` source | maps `extVars` and `tlas`, each from variable name to property | `directory.jsonnet.extVars`, `directory.jsonnet.tlas` |
-| `sources.<s>.properties` of a `kustomize` source | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` (`op: replace`) |
+| `sources.<s>.properties` of a `kustomize` source | a map from resource identity, as the source's own kustomization lists the resource before its `namespace:` field applies, to a map from JSON pointer to property | `kustomize.patches` (`op: replace`) |
 | `manifests.properties` | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` of the manifests (`op: replace`) |
 
 1. A `directory` source takes no mapping.
@@ -321,7 +326,9 @@ across layers like the rest of the file; setting an entry to `null` removes it.
    none, never one of the same name in another namespace. The resource
    targeted by `manifests.properties` MUST exist once all layers are applied, and so MUST the field each JSON pointer designates: the
    property replaces a value, and never adds one.
-3. A mapped value is applied after every layer: a Helm parameter overrides
+3. The resources of a `kustomize` source are not the layout's: Kustomize
+   ignores a mapping that matches none of them, and nothing reports it.
+4. A mapped value is applied after every layer: a Helm parameter overrides
    every values file, and a Kustomize patch applies after every component. A
    higher layer that needs to set a mapped field itself removes the mapping
    entry.
@@ -407,7 +414,9 @@ This section is informative. A layout can be assembled by Argo CD alone:
    file reads as empty), merges `app.yaml` and the properties, and fails the
    render on any error of §11 it can detect. It checks the catalog, the
    environments placed on its cluster and that cluster's directory, so that a
-   mistake blocks only the clusters it concerns. It cannot detect duplicate
+   mistake mostly blocks only the clusters it concerns; an `app.yaml` of
+   another cluster's directory is still read, to know which sources an
+   instance declares, and a mistake there blocks its environment's clusters. It cannot detect duplicate
    keys in a YAML file, a JSON pointer naming a missing field (§9.3.2), nor
    the resources §8.7 describes when they are cluster-scoped or rendered by a
    source; those surface when the instance's Application renders or syncs.
@@ -443,7 +452,8 @@ This section is informative. A layout can be assembled by Argo CD alone:
    name longer than Helm's 53 characters.
 6. The Application names it emits need Argo CD 3.0 or later, whose default
    annotation-based resource tracking takes names longer than a label's 63
-   characters. A Helm source whose repository URL has no scheme is an OCI
+   characters. The wiring is tested with the Helm and Kustomize versions of
+   Argo CD 3.5. A Helm source whose repository URL has no scheme is an OCI
    registry, which Argo CD reaches through a repository or a credential
    template registered with OCI enabled and matching that URL. The layout's own directories, `catalog/`, `clusters/` and
    `envs/`, never collide with the names Helm reserves at a chart's root.

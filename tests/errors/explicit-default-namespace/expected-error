@@ -1,1 +1,0 @@
-sets namespace default, which Kustomize does not tell apart from none
