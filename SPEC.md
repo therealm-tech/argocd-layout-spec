@@ -88,11 +88,13 @@ manifests/
    instance is declared in its `env.yaml`. An app is declared by its default
    layer. A source of an instance is declared by being named under `sources`
    in the `app.yaml` of any of the instance's layers, on any of its
-   environment's clusters, even with a `null` value.
+   environment's clusters, those it is disabled on included, even with a
+   `null` value.
 5. A directory or file that does not match a declared environment, cluster,
-   app, instance or source is an error (orphan). Orphans are checked against
-   declared names, not against the merged configuration: a values file whose
-   source a higher layer removes is unused, not an orphan.
+   app, instance or source is an error (orphan), placeholders such as
+   `.gitkeep` included. Orphans are checked against declared names, not
+   against the merged configuration: a values file whose source a higher layer
+   removes is unused, not an orphan.
 
 ## 4. Apps and instances
 
@@ -158,7 +160,10 @@ manifests:
 ```
 
 `namespace` is OPTIONAL: the namespace the instance is deployed to. Without
-it, the wiring chooses one.
+it, the wiring chooses one. Like every field, it MAY be set or changed by any
+layer; so MAY `releaseName`. A wiring that derives either from the instance
+name changes it when the instance is renamed, so renaming an instance whose
+data must survive first pins both in its environment layer.
 
 ### 6.1 Sources
 
@@ -197,6 +202,18 @@ merge, switching a source between `chart` and `path` sets the other one to
 `null`, and changing its `type` replaces or removes its `properties` mapping,
 whose shape depends on the type (§9.3).
 
+### 6.3 Application settings
+
+`application` is OPTIONAL and holds settings of the Argo CD Application that
+deploys the instance, merged across layers like the rest of the file:
+
+| Field | Content |
+| --- | --- |
+| `syncOptions` | Argo CD sync options added to the wiring's own, such as `ServerSideApply=true` for CRDs too large for a client-side apply |
+| `ignoreDifferences` | Argo CD `ignoreDifferences` entries, for fields a controller rewrites after the sync, such as injected CA bundles |
+
+No other field is allowed: when and how an Application syncs is operations.
+
 ## 7. Values
 
 1. `values/<source>.yaml` holds the Helm values of the source `<source>`. It
@@ -219,7 +236,8 @@ whose shape depends on the type (§9.3).
    document, and is named after its identity.
 4. A file of `patches/` is a strategic merge patch named after the identity of
    its target. The target MUST be present once the lower layers and the
-   resources of the patch's own layer are applied. A patch containing
+   resources of the patch's own layer are applied, and the patch MUST carry
+   the target's `apiVersion`: Kustomize matches a patch on its version too. A patch containing
    `$patch: delete` removes the resource. On a custom resource, a strategic
    merge patch replaces lists as a whole: Kustomize knows no merge key for
    them.
@@ -231,8 +249,9 @@ whose shape depends on the type (§9.3).
 7. A resource whose identity does not depend on the instance exists once per
    cluster: a cluster-scoped resource, a resource of the layout's manifests
    that sets its namespace, or a resource a source renders with a fixed name,
-   such as a CRD. An app holding any MUST be instantiated at most once per
-   cluster, all environments included. Operators and other cluster-wide apps
+   such as a CRD. At most one instance per cluster, all environments included,
+   MAY keep such a resource once its layers are applied; an instance whose
+   layers delete it does not count. Operators and other cluster-wide apps
    therefore usually belong to a single environment per cluster.
 
 ## 9. Properties
@@ -263,7 +282,8 @@ whose shape depends on the type (§9.3).
    Kustomize patch. Jsonnet variables are strings: a Jsonnet program parses
    the ones it needs as numbers or booleans.
 5. A property name is a string once YAML has parsed it: `y`, `n`, `on`, `off`,
-   `yes`, `no` and `null` MUST be quoted, or avoided.
+   `yes`, `no` and `null` MUST be quoted, or avoided, both as keys of
+   `properties.yaml` and as values of a mapping.
 
 ### 9.3 Mapping
 
@@ -304,7 +324,8 @@ instances:
     local: true
 ```
 
-1. `clusters` lists the clusters the environment is placed on.
+1. `clusters` lists the clusters the environment is placed on. An environment
+   without clusters is placed nowhere, and deploys nothing.
    `envs/<e>/clusters/<c>/` exists only for a listed cluster. A cluster with
    no `clusters/<c>/` directory is a cluster without specific configuration.
 2. `clusters.<c>.disabled` lists instances not installed on that cluster. Each
@@ -330,7 +351,8 @@ A conforming layout has none of the following:
    does not list exactly the files of `resources/` and `patches/` (§8.2);
 9. a manifest file whose name does not match its identity, or that holds more
    than one YAML document (§8.3);
-10. a patch whose target is absent, or a resource added twice (§8.4, §8.5);
+10. a patch whose target is absent or has another `apiVersion`, or a resource
+    added twice (§8.4, §8.5);
 11. an app holding resources of a fixed identity instantiated several times on
     one cluster (§8.7);
 12. a reference to an undefined property, or a property that is not a scalar
@@ -338,7 +360,9 @@ A conforming layout has none of the following:
 13. a mapping on a `directory` source (§9.3.1);
 14. a `manifests.properties` target that does not exist (§9.3.2);
 15. an undeclared instance in `disabled`, or an instance with both `app` and
-    `local` (§10).
+    `local` (§10);
+16. an `application` field other than `syncOptions` and `ignoreDifferences`
+    (§6.3).
 
 The layout does not support:
 
@@ -360,7 +384,12 @@ This section is informative. A layout can be assembled by Argo CD alone:
 3. The chart reads the layout with `.Files`: it selects the environments
    placed on its cluster, expands their instances, reads each layer (a missing
    file reads as empty), merges `app.yaml` and the properties, and fails the
-   render on any error of §11 it can detect.
+   render on any error of §11 it can detect. It checks the catalog, the
+   environments placed on its cluster and that cluster's directory, so that a
+   mistake blocks only the clusters it concerns. It cannot detect duplicate
+   keys in a YAML file, a JSON pointer naming a missing field (§9.3.2), nor
+   the resources §8.7 describes when they are cluster-scoped or rendered by a
+   source; those surface when the instance's Application renders or syncs.
 4. It emits one Application per instance and placement: the merged sources,
    each with its tool set explicitly so that Argo CD never guesses it, the
    values files of every layer through `ref` sources, the Helm parameters,
@@ -377,7 +406,9 @@ This section is informative. A layout can be assembled by Argo CD alone:
    name longer than Helm's 53 characters.
 6. The Application names it emits need Argo CD 3.0 or later, whose default
    annotation-based resource tracking takes names longer than a label's 63
-   characters. The layout's own directories, `catalog/`, `clusters/` and
+   characters. A Helm source whose repository URL has no scheme is an OCI
+   registry, which Argo CD reaches through a repository registered with OCI
+   enabled. The layout's own directories, `catalog/`, `clusters/` and
    `envs/`, never collide with the names Helm reserves at a chart's root.
 7. A separate catalog is a Helm chart too, published at a version and tagged
    `v<version>` in Git. Its `Chart.yaml` names the Git repository in
@@ -388,8 +419,10 @@ This section is informative. A layout can be assembled by Argo CD alone:
    manifests as remote Kustomize components, both at that tag. Upgrading the
    catalog is bumping the dependency and refreshing `Chart.lock`. Nothing but
    this convention ties the package to the tag: they are published together,
-   from the same commit. Argo CD's repo-server fetches the remote components
-   itself, with the credentials it holds for that repository.
+   from the same commit. Kustomize fetches the remote components itself,
+   twice per render of an Application; a catalog that is not public needs
+   credentials Argo CD hands to Kustomize, which may be only those of the
+   Application's own source repository.
 
 Everything is rendered by Helm and Kustomize; no plugin is involved.
 [examples/](examples/) implements this wiring with its catalog alongside, and

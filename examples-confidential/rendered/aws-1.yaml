@@ -77,7 +77,7 @@ spec:
         valueFiles:
           - $catalog/examples/catalog/apps/cert-manager/values/chart.yaml
         parameters:
-          - name: image.registry
+          - name: imageRegistry
             value: "quay.io"
             forceString: true
     - repoURL: https://github.com/therealm-tech/argocd-layout-spec
@@ -135,6 +135,16 @@ spec:
         maxDuration: 5m
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      jqPathExpressions:
+      - .webhooks[].clientConfig.caBundle
+      kind: ValidatingWebhookConfiguration
+    - group: apiextensions.k8s.io
+      jqPathExpressions:
+      - .spec.conversion.webhook.clientConfig.caBundle
+      kind: CustomResourceDefinition
 
 ---
 # Source: layout/templates/applications.yaml

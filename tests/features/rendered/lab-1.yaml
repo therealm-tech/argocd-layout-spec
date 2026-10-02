@@ -87,6 +87,13 @@ spec:
         maxDuration: 5m
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      jqPathExpressions:
+      - .webhooks[].clientConfig.caBundle
+      kind: ValidatingWebhookConfiguration
 
 ---
 # Source: layout/templates/applications.yaml
@@ -128,6 +135,7 @@ spec:
       kustomize:
         components:
           - ../catalog/apps/mixed/manifests
+          - ../envs/dev/instances/trimmed/manifests
           - ../clusters/lab-1/overrides/mixed/manifests
   syncPolicy:
     retry:
@@ -138,3 +146,10 @@ spec:
         maxDuration: 5m
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      jqPathExpressions:
+      - .webhooks[].clientConfig.caBundle
+      kind: ValidatingWebhookConfiguration

@@ -12,3 +12,14 @@ manifests:
   properties:
     external-secrets.io/ClusterSecretStore/vault:
       /spec/provider/vault/server: vaultURL
+application:
+  ignoreDifferences:
+    # The chart's cert-controller injects the CA bundles after the sync.
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jqPathExpressions:
+        - .spec.conversion.webhook.clientConfig.caBundle

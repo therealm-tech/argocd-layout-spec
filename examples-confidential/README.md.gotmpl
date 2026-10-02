@@ -39,7 +39,10 @@ flowchart LR
   layout's ApplicationSet on `aws-1`, [envs/acme/](envs/acme/) runs Grafana
   there, and [clusters/aws-1/](clusters/aws-1/) adapts them to AWS: its
   secret store is AWS Secrets Manager instead of the catalog's Vault, and its
-  ingress class is the AWS load balancer's.
+  certificate issuer proves domain ownership through Route 53 DNS. A second
+  AWS cluster repeats `clusters/aws-1/`: properties and overrides are per
+  cluster, and nothing groups clusters. In `env.yaml`, it disables `layout`,
+  which runs only where Argo CD does.
 - **The wiring is the same chart** as in [examples/](../examples/), shared
   through symbolic links. A real private repository would copy
   [templates/](templates/), or take them from a Helm library chart whose

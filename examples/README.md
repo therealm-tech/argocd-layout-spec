@@ -102,10 +102,56 @@ for instance [envs/prod/env.yaml](envs/prod/env.yaml):
 - an instance with no field is the app of the same name;
 - `app: <app>` installs an app under another name, which is how one app is
   installed twice;
-- `local: true` marks an app that exists only in this environment, defined
-  entirely in its `instances/<instance>/` directory, like `whoami` in
+- `local: true` marks an app that exists only in this environment: its
+  definition is its `instances/<instance>/` directory, which a placement layer
+  can still adjust per cluster, like `whoami` in
   [envs/staging/env.yaml](envs/staging/env.yaml);
 - `disabled:` under a cluster skips instances on that cluster.
+
+## Every field of app.yaml
+
+An `app.yaml` holds only what its layer changes: the catalog's states the
+whole app, a higher layer one field or two. All the fields, on an imaginary
+app:
+
+```yaml
+namespace: monitoring          # where the instance is deployed; without it,
+                               # <env>-<instance>
+sources:                       # what the app deploys, by name
+  chart:                       # a source named "chart": its Helm values are
+                               # in values/chart.yaml
+    type: helm                 # helm, kustomize, jsonnet or directory
+    repoURL:                   # where it comes from: a literal URL, or a
+      property: ghcrCharts     # property holding one
+    repository: grafana/helm-charts  # appended to repoURL after a "/"
+    chart: grafana             # the chart; a Git source has `path` instead
+    targetRevision: "10.5.15"  # always quoted: YAML reads 1.10 as 1.1
+    releaseName: grafana       # Helm release name; without it,
+                               # <env>-<instance>
+    properties:                # Helm parameter <- property name
+      global.imageRegistry: dockerImages
+manifests:
+  properties:                  # object in manifests/ <- field <- property
+    external-secrets.io/ExternalSecret/grafana-admin:
+      /spec/secretStoreRef/name: secretStore
+application:                   # settings of the Argo CD Application
+  syncOptions:
+    - ServerSideApply=true
+  ignoreDifferences: []
+```
+
+Three things to know about them:
+
+- **A property wins over the values files.** `global.imageRegistry` above is
+  set from `dockerImages` after every values file is read, so writing it in a
+  `values/chart.yaml` changes nothing. To set it by hand in one layer, remove
+  the mapping there first: `global.imageRegistry: null` under the source's
+  `properties`.
+- **A property must exist for every placement of the instance.** One defined
+  only in `clusters/airgap-1/properties.yaml` fails the render of `lab-1`:
+  give it a default in [catalog/properties.yaml](catalog/properties.yaml).
+- **`null` removes.** In any layer, `<field>: null` deletes what the layers
+  below set, a whole source included.
 
 ## How the pieces fit
 
@@ -148,13 +194,15 @@ namespace and Helm release name.
 [templates/](templates/) is the whole chart. When it finds a mistake, the
 render of `layout-<cluster>` fails with a message naming the file and the rule
 of [SPEC.md](../SPEC.md), so the error shows in Argo CD before anything is
-applied. It checks names, files that match nothing, how each instance
-resolves, the sources, the values files, every `manifests/` directory, the
-properties, and that no two instances install the same Helm release in the
-same namespace. What it cannot see surfaces when the instance's own
-Application renders or syncs: the objects a chart renders, and two apps
-installing the same cluster-wide object — which is why such apps go in
-`platform`, once per cluster.
+applied. It checks the catalog, the environments placed on that cluster and
+the cluster's own directory — so a typo in `staging` never blocks `airgap-1`,
+which does not run it. It checks names, files that match nothing, how each
+instance resolves, the sources, the values files, every `manifests/`
+directory, the properties, and that no two instances share a Helm release in
+a namespace. What it cannot see surfaces when the instance's own Application
+renders or syncs: the objects a chart renders, a property mapped to a field
+that does not exist, and two apps installing the same cluster-wide object —
+which is why such apps go in `platform`, once per cluster.
 
 ## Following one instance
 
@@ -189,6 +237,10 @@ each property lands: the chart's registry, a Helm parameter, a field of the
   Argo CD on `lab-1`, not by `airgap-1`: the chart registry property matters
   when the central Argo CD must use the mirror too, or when an air-gapped
   cluster runs its own Argo CD;
+- container images pulled from Harbor too. `airgap-1`'s nodes are configured
+  to pull every public registry through Harbor, so an image no property
+  rewrites still arrives; Grafana's and cert-manager's are rewritten
+  explicitly, which is how a cluster without such node mirrors would do it;
 - the values files of every layer, in order, read from this repository;
 - `global.imageRegistry` set to Harbor, and the `ExternalSecret` reading from
   the cluster's secret store;
@@ -201,6 +253,18 @@ You need Argo CD 3.0 or later running on `lab-1`, the `argocd` command logged
 in to it (`argocd login`), and `kubectl` pointed at `lab-1`. Argo CD on
 `lab-1` must reach the API server of `airgap-1` and the mirrors `airgap-1`
 uses: it renders and applies everything from there.
+
+Register the OCI registries the charts come from, so that Argo CD reads a
+`repoURL` without `https://` as one (on `airgap-1`'s side, the Harbor
+paths):
+
+```sh
+argocd repo add quay.io --type helm --enable-oci --name quay
+```
+
+```sh
+argocd repo add ghcr.io --type helm --enable-oci --name ghcr
+```
 
 Register every cluster under its name in the layout, including the one
 running Argo CD, so that the ApplicationSet sees it:
@@ -265,6 +329,11 @@ Applications, then a sync of the Applications that changed.
   environments placed on it. Disable there the instances it cannot run: the
   apps of another cluster, like `traefik`, and the layout's own `layout`,
   which belongs to the cluster running Argo CD only.
+- **Rename an instance**: its Application, and its namespace and release
+  names unless its `app.yaml` sets them, change with it — which for a
+  database or a Ceph cluster means a second, empty one next to the old. Pin
+  them first in the environment layer (`namespace: prod-ceph-ssd`, and
+  `releaseName: prod-ceph-ssd` under the source), then rename.
 - **Remove an instance**: delete its workloads first, with
   `argocd app delete <env>.<instance>.<cluster> --cascade`, then remove it
   from `env.yaml`. Removing it first only deletes its Application, when
@@ -278,7 +347,8 @@ catalog as a Helm chart.
 
 ## Chart values
 
-The ApplicationSet sets these for each `layout-<cluster>`; you only set them
+The ApplicationSet sets `cluster` and `layout` for each `layout-<cluster>`;
+`project` and `argocdNamespace` keep their defaults. You only set values
 yourself when bootstrapping.
 
 | Key | Type | Default | Description |

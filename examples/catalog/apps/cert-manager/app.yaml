@@ -9,4 +9,4 @@ sources:
     releaseName: cert-manager
     targetRevision: v1.21.2
     properties:
-      image.registry: quayImages
+      imageRegistry: quayImages

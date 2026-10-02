@@ -27,7 +27,7 @@ jobs:
       - name: set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5.0.1
         with:
-          version: v4.2.4
+          version: v4.2.1
       - name: install pre-commit
         run: pip install pre-commit==4.6.2
       - name: run pre-commit
@@ -42,6 +42,6 @@ jobs:
       - name: set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310  # v5.0.1
         with:
-          version: v4.2.4
+          version: v4.2.1
       - name: render the example layout
         run: tests/render.sh

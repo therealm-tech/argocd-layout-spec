@@ -4,7 +4,9 @@ metadata:
   name: letsencrypt
 spec:
   acme:
+    # A strategic merge patch replaces the whole list on a custom resource:
+    # this is the issuer's only solver on aws-1.
     solvers:
-      - http01:
-          ingress:
-            ingressClassName: alb
+      - dns01:
+          route53:
+            region: eu-west-1

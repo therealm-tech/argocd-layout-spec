@@ -42,3 +42,11 @@ manifests:
   properties:
     core/ConfigMap/settings:
       /data/api: apiURL
+application:
+  syncOptions:
+    - ServerSideApply=true
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle

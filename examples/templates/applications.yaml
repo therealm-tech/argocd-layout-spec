@@ -5,14 +5,18 @@
 {{- $catalog := include "layout.catalog" . | fromJson -}}
 {{- $io := dict "root" $root "catalog" $catalog -}}
 
-{{- /* Environments, checked whatever the cluster (SPEC §3, §10). */ -}}
+{{- /*
+Only the environments placed on this cluster are read and checked, so that a
+mistake in one environment never blocks the clusters it does not run on.
+*/ -}}
 {{- $envs := dict -}}
 {{- range $envFile, $_ := .Files.Glob "envs/*/env.yaml" -}}
 {{- $env := base (dir $envFile) -}}
-{{- include "layout.checkLabel" (dict "name" $env "what" "environment" "context" $envFile) -}}
 {{- $def := include "layout.parse" (merge (dict "path" $envFile) $io) | fromJson -}}
 {{- $clusters := $def.clusters | default (dict) -}}
 {{- $instances := $def.instances | default (dict) -}}
+{{- if hasKey $clusters $cluster -}}
+{{- include "layout.checkLabel" (dict "name" $env "what" "environment" "context" $envFile) -}}
 {{- range $c, $placement := $clusters -}}
 {{- include "layout.checkLabel" (dict "name" $c "what" "cluster" "context" $envFile) -}}
 {{- range $d := ($placement | default (dict)).disabled | default (list) -}}
@@ -29,14 +33,13 @@
 {{- end -}}
 {{- $_ := set $envs $env (dict "clusters" $clusters "instances" $instances) -}}
 {{- end -}}
+{{- end -}}
 
 {{- /* Orphans under envs/ and clusters/ (SPEC §3.5, §5.3, §5.5). */ -}}
 {{- range $file, $_ := .Files.Glob "envs/**" -}}
 {{- $parts := splitList "/" $file -}}
 {{- $env := index $parts 1 -}}
-{{- if not (hasKey $envs $env) -}}
-{{- fail (printf "%s: envs/%s/ has no env.yaml (SPEC §3.1)" $file $env) -}}
-{{- end -}}
+{{- if hasKey $envs $env -}}
 {{- $e := index $envs $env -}}
 {{- $rest := slice $parts 2 -}}
 {{- $orphan := false -}}
@@ -63,7 +66,13 @@
 {{- fail (printf "%s: matches no declared environment, cluster or instance (SPEC §3.5)" $file) -}}
 {{- end -}}
 {{- end -}}
-{{- range $file, $_ := .Files.Glob "clusters/**" -}}
+{{- end -}}
+{{- range $env, $e := $envs -}}
+{{- range $instance, $_ := $e.instances -}}
+{{- include "layout.checkAppDirectory" (merge (dict "layer" (printf "envs/%s/instances/%s" $env $instance)) $io) -}}
+{{- end -}}
+{{- end -}}
+{{- range $file, $_ := .Files.Glob (printf "clusters/%s/**" $cluster) -}}
 {{- $parts := splitList "/" $file -}}
 {{- $c := index $parts 1 -}}
 {{- include "layout.checkLabel" (dict "name" $c "what" "cluster" "context" $file) -}}
@@ -91,7 +100,7 @@
 
 {{- /* Every app directory, used on this cluster or not (SPEC §3.5, §8). */ -}}
 {{- $appDirectories := dict -}}
-{{- range $file := concat (include "layout.glob" (merge (dict "path" "catalog/apps") $io) | fromJsonArray) (include "layout.glob" (merge (dict "path" "clusters") $io) | fromJsonArray) -}}
+{{- range $file := concat (include "layout.glob" (merge (dict "path" "catalog/apps") $io) | fromJsonArray) (include "layout.glob" (merge (dict "path" (printf "clusters/%s" $cluster)) $io) | fromJsonArray) -}}
 {{- $parts := splitList "/" $file -}}
 {{- if hasPrefix "catalog/" $file -}}
 {{- $_ := set $appDirectories (join "/" (slice $parts 0 3)) true -}}
@@ -204,25 +213,30 @@
 
 {{- /* Stack the manifest layers (SPEC §8.4, §8.5). */ -}}
 {{- $present := dict -}}
-{{- $fixedIdentity := false -}}
 {{- range $layer := $manifestLayers -}}
 {{- $m := include "layout.manifests" (merge (dict "layer" $layer) $io) | fromJson -}}
-{{- range $identity := $m.resources -}}
-{{- if hasKey $present $identity -}}
-{{- fail (printf "%s: %s adds %s, which a lower layer already has (SPEC §8.5)" $context $layer $identity) -}}
+{{- range $resource := $m.resources -}}
+{{- if hasKey $present $resource.identity -}}
+{{- fail (printf "%s: %s adds %s, which a lower layer already has (SPEC §8.5)" $context $layer $resource.identity) -}}
 {{- end -}}
-{{- $_ := set $present $identity true -}}
-{{- if contains "_" $identity -}}
-{{- $fixedIdentity = true -}}
-{{- end -}}
+{{- $_ := set $present $resource.identity $resource.apiVersion -}}
 {{- end -}}
 {{- range $patch := $m.patches -}}
 {{- if not (hasKey $present $patch.identity) -}}
 {{- fail (printf "%s: %s targets %s, absent from the lower layers (SPEC §8.4)" $context $patch.file $patch.identity) -}}
 {{- end -}}
+{{- if ne $patch.apiVersion (index $present $patch.identity) -}}
+{{- fail (printf "%s: %s is written against %s, but its target is %s; Kustomize would not match them (SPEC §8.4)" $context $patch.file $patch.apiVersion (index $present $patch.identity)) -}}
+{{- end -}}
 {{- if $patch.delete -}}
 {{- $_ := unset $present $patch.identity -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $fixedIdentity := false -}}
+{{- range $identity, $_ := $present -}}
+{{- if contains "_" $identity -}}
+{{- $fixedIdentity = true -}}
 {{- end -}}
 {{- end -}}
 {{- $manifestMapping := ($spec.manifests | default (dict)).properties | default (dict) -}}
@@ -237,6 +251,13 @@
 
 {{- /* Namespace and Helm releases, unique together on the cluster (SPEC §6, §12). */ -}}
 {{- $namespace := $spec.namespace | default (printf "%s-%s" $env $instance) -}}
+{{- if not $spec.namespace -}}
+{{- $key := printf "default namespace %s" $namespace -}}
+{{- if hasKey $namespaces $key -}}
+{{- fail (printf "%s and %s both default to namespace %q; set namespace in one of them, or rename one" (index $namespaces $key) $context $namespace) -}}
+{{- end -}}
+{{- $_ := set $namespaces $key $context -}}
+{{- end -}}
 {{- include "layout.checkLabel" (dict "name" (toString $namespace) "what" "namespace" "context" $context) -}}
 {{- $helmSources := list -}}
 {{- range $name, $source := $sources -}}
@@ -262,13 +283,12 @@
 {{- $_ := set $releases $name $release -}}
 {{- end -}}
 {{- if $app -}}
+{{- if $fixedIdentity -}}
 {{- if hasKey $apps $app -}}
-{{- $previous := index $apps $app -}}
-{{- if or $previous.fixed $fixedIdentity -}}
-{{- fail (printf "%s and %s instantiate %q, whose manifests hold resources of a fixed namespace (SPEC §8.7)" $previous.context $context $app) -}}
+{{- fail (printf "%s and %s instantiate %q, and both keep resources of a fixed namespace (SPEC §8.7)" (index $apps $app) $context $app) -}}
 {{- end -}}
+{{- $_ := set $apps $app $context -}}
 {{- end -}}
-{{- $_ := set $apps $app (dict "context" $context "fixed" $fixedIdentity) -}}
 {{- end }}
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -413,8 +433,23 @@ spec:
         duration: 15s
         factor: 2
         maxDuration: 5m
+    {{- $application := $spec.application | default (dict) }}
+    {{- range $field, $_ := $application }}
+    {{- if not (has $field (list "syncOptions" "ignoreDifferences")) }}
+    {{- fail (printf "%s: application.%s is not supported; use syncOptions or ignoreDifferences (SPEC §6.3)" $context $field) }}
+    {{- end }}
+    {{- end }}
+    {{- $syncOptions := list "CreateNamespace=true" }}
+    {{- if $application.ignoreDifferences }}
+    {{- $syncOptions = append $syncOptions "RespectIgnoreDifferences=true" }}
+    {{- end }}
+    {{- $syncOptions = concat $syncOptions ($application.syncOptions | default (list)) | uniq }}
     syncOptions:
-      - CreateNamespace=true
+      {{- toYaml $syncOptions | nindent 6 }}
+  {{- with $application.ignoreDifferences }}
+  ignoreDifferences:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

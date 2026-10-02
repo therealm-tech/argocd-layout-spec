@@ -8,3 +8,7 @@ sources:
     chart: rook-ceph
     targetRevision: "v1.20.8"
     releaseName: rook-ceph
+application:
+  syncOptions:
+    # Rook's CRDs exceed the 256 KiB annotation a client-side apply stores.
+    - ServerSideApply=true

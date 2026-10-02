@@ -184,9 +184,9 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- fail (printf "%s: must be named %s/%s.yaml after its content (SPEC §8.3)" $file $kind $identity) -}}
 {{- end -}}
 {{- if eq $kind "resources" -}}
-{{- $_ := set $out "resources" (append $out.resources $identity) -}}
+{{- $_ := set $out "resources" (append $out.resources (dict "identity" $identity "apiVersion" (toString $obj.apiVersion) "file" $file)) -}}
 {{- else -}}
-{{- $_ := set $out "patches" (append $out.patches (dict "identity" $identity "delete" (eq (toString (index $obj "$patch")) "delete") "file" $file)) -}}
+{{- $_ := set $out "patches" (append $out.patches (dict "identity" $identity "apiVersion" (toString $obj.apiVersion) "delete" (eq (toString (index $obj "$patch")) "delete") "file" $file)) -}}
 {{- end -}}
 {{- end -}}
 {{- toJson $out -}}
