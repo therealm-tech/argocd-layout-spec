@@ -70,10 +70,10 @@ spec:
       path: manifests
       targetRevision: "main"
       directory: {}
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -120,7 +120,7 @@ spec:
     name: lab-1
     namespace: dev-storage
   sources:
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -167,7 +167,7 @@ spec:
       path: manifests
       targetRevision: "main"
       directory: {}
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -224,10 +224,10 @@ spec:
       path: manifests
       targetRevision: "main"
       directory: {}
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:

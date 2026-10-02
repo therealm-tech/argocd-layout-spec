@@ -1,5 +1,5 @@
 cluster: lab-1
 layout:
-  repoURL: https://github.com/therealm-tech/argocd-layout-spec
+  repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
   targetRevision: HEAD
   path: examples

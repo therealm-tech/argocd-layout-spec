@@ -23,10 +23,10 @@ spec:
           - name: imageRegistry
             value: "harbor.airgap.internal/quay.io"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -62,7 +62,7 @@ spec:
       targetRevision: "2.11.0"
       helm:
         releaseName: external-secrets
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -147,7 +147,7 @@ spec:
         valueFiles:
           - $layout/examples/catalog/apps/rook-ceph-cluster/values/chart.yaml
           - $layout/examples/envs/prod/instances/ceph-hdd/values/chart.yaml
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
   syncPolicy:
@@ -182,7 +182,7 @@ spec:
         valueFiles:
           - $layout/examples/catalog/apps/rook-ceph-cluster/values/chart.yaml
           - $layout/examples/envs/prod/instances/ceph-ssd/values/chart.yaml
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
   syncPolicy:
@@ -222,10 +222,10 @@ spec:
           - name: global.imageRegistry
             value: "harbor.airgap.internal/docker.io"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:

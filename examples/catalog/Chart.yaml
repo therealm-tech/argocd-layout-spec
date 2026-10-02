@@ -4,6 +4,6 @@ description: The catalog of the example layout, packaged for layouts that consum
 type: application
 version: 0.1.0
 sources:
-  - https://github.com/therealm-tech/argocd-layout-spec
+  - https://github.com/therealm-tech/argocd-layout-spec.git
 annotations:
   layout/catalog-path: examples/catalog

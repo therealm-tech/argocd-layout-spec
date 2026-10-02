@@ -93,7 +93,7 @@ helm dependency build .
 ```
 
 ```sh
-helm template layout . --set cluster=aws-1 --set layout.repoURL=https://github.com/therealm-tech/argocd-layout-spec --set layout.targetRevision=HEAD --set layout.path=examples-confidential | kubectl apply -n argocd -f -
+helm template layout . --set cluster=aws-1 --set layout.repoURL=https://github.com/therealm-tech/argocd-layout-spec.git --set layout.targetRevision=HEAD --set layout.path=examples-confidential | kubectl apply -n argocd -f -
 ```
 
 ```sh

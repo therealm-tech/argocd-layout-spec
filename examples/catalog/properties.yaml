@@ -5,6 +5,6 @@ quayImages: quay.io
 dockerImages: docker.io
 secretStore: vault
 vaultURL: https://vault.example.com
-layoutRepoURL: https://github.com/therealm-tech/argocd-layout-spec
+layoutRepoURL: https://github.com/therealm-tech/argocd-layout-spec.git
 layoutRevision: HEAD
 layoutPath: examples

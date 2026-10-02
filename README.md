@@ -1,7 +1,7 @@
-# argocd-layout-spec
+# THEREALM ArgoCD Layout Spec
 
-A specification of the file layout of a GitOps repository that deploys
-applications with Argo CD.
+THEREALM ArgoCD Layout Spec (THEREALM ALS) specifies the file layout of a
+GitOps repository that deploys applications with Argo CD.
 
 ## Description
 

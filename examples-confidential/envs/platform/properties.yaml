@@ -1,2 +1,2 @@
-layoutRepoURL: https://github.com/therealm-tech/argocd-layout-spec
+layoutRepoURL: https://github.com/therealm-tech/argocd-layout-spec.git
 layoutPath: examples-confidential

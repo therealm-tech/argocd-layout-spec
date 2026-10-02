@@ -29,14 +29,14 @@ spec:
       project: default
       revisionHistoryLimit: 0
       source:
-        repoURL: https://github.com/therealm-tech/argocd-layout-spec
+        repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
         targetRevision: HEAD
         path: examples
         helm:
           valuesObject:
             cluster: "{{ .name }}"
             layout:
-              repoURL: https://github.com/therealm-tech/argocd-layout-spec
+              repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
               targetRevision: HEAD
               path: examples
       destination:

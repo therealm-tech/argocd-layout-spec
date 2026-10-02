@@ -337,7 +337,7 @@ the one that deploys the ApplicationSet (the Sync button in the Argo CD UI
 does the same as `argocd app sync`):
 
 ```sh
-helm template layout . --set cluster=lab-1 --set layout.repoURL=https://github.com/therealm-tech/argocd-layout-spec --set layout.targetRevision=HEAD --set layout.path=examples | kubectl apply -n argocd -f -
+helm template layout . --set cluster=lab-1 --set layout.repoURL=https://github.com/therealm-tech/argocd-layout-spec.git --set layout.targetRevision=HEAD --set layout.path=examples | kubectl apply -n argocd -f -
 ```
 
 ```sh

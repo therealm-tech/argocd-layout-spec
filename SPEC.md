@@ -1,4 +1,4 @@
-# Argo CD layout specification
+# THEREALM ArgoCD Layout Spec (THEREALM ALS)
 
 The key words MUST, MUST NOT, SHOULD and MAY are to be interpreted as described
 in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and

@@ -23,10 +23,10 @@ spec:
           - name: imageRegistry
             value: "quay.io"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -61,7 +61,7 @@ spec:
       targetRevision: "2.11.0"
       helm:
         releaseName: external-secrets
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -108,7 +108,7 @@ spec:
     name: lab-1
     namespace: argocd
   sources:
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -126,7 +126,7 @@ spec:
                 value: "examples"
               - op: replace
                 path: /spec/template/spec/source/helm/valuesObject/layout/repoURL
-                value: "https://github.com/therealm-tech/argocd-layout-spec"
+                value: "https://github.com/therealm-tech/argocd-layout-spec.git"
               - op: replace
                 path: /spec/template/spec/source/helm/valuesObject/layout/targetRevision
                 value: "HEAD"
@@ -135,7 +135,7 @@ spec:
                 value: "examples"
               - op: replace
                 path: /spec/template/spec/source/repoURL
-                value: "https://github.com/therealm-tech/argocd-layout-spec"
+                value: "https://github.com/therealm-tech/argocd-layout-spec.git"
               - op: replace
                 path: /spec/template/spec/source/targetRevision
                 value: "HEAD"
@@ -200,7 +200,7 @@ spec:
         releaseName: traefik
         valueFiles:
           - $layout/examples/clusters/lab-1/apps/traefik/values/chart.yaml
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
   syncPolicy:
@@ -235,7 +235,7 @@ spec:
         valueFiles:
           - $layout/examples/catalog/apps/rook-ceph-cluster/values/chart.yaml
           - $layout/examples/envs/prod/instances/ceph-hdd/values/chart.yaml
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
   syncPolicy:
@@ -274,10 +274,10 @@ spec:
           - name: global.imageRegistry
             value: "docker-cache.example.com"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:
@@ -329,10 +329,10 @@ spec:
           - name: global.imageRegistry
             value: "docker.io"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples/base
       kustomize:

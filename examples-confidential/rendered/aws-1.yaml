@@ -24,18 +24,18 @@ spec:
           - name: global.imageRegistry
             value: "docker.io"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       ref: layout
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "v0.1.0"
       ref: catalog
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples-confidential/base
       kustomize:
         components:
-          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/grafana/manifests?ref=v0.1.0
+          - https://github.com/therealm-tech/argocd-layout-spec.git//examples/catalog/apps/grafana/manifests?ref=v0.1.0
         patches:
           - target:
               group: external-secrets.io
@@ -81,15 +81,15 @@ spec:
           - name: imageRegistry
             value: "quay.io"
             forceString: true
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "v0.1.0"
       ref: catalog
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples-confidential/base
       kustomize:
         components:
-          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/cert-manager/manifests?ref=v0.1.0
+          - https://github.com/therealm-tech/argocd-layout-spec.git//examples/catalog/apps/cert-manager/manifests?ref=v0.1.0
           - ../clusters/aws-1/overrides/cert-manager/manifests
   syncPolicy:
     retry:
@@ -120,12 +120,12 @@ spec:
       targetRevision: "2.11.0"
       helm:
         releaseName: external-secrets
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples-confidential/base
       kustomize:
         components:
-          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/external-secrets/manifests?ref=v0.1.0
+          - https://github.com/therealm-tech/argocd-layout-spec.git//examples/catalog/apps/external-secrets/manifests?ref=v0.1.0
           - ../clusters/aws-1/overrides/external-secrets/manifests
   syncPolicy:
     retry:
@@ -158,12 +158,12 @@ spec:
     name: aws-1
     namespace: argocd
   sources:
-    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec.git
       targetRevision: "HEAD"
       path: examples-confidential/base
       kustomize:
         components:
-          - https://github.com/therealm-tech/argocd-layout-spec//examples/catalog/apps/layout/manifests?ref=v0.1.0
+          - https://github.com/therealm-tech/argocd-layout-spec.git//examples/catalog/apps/layout/manifests?ref=v0.1.0
         patches:
           - target:
               group: argoproj.io
@@ -176,7 +176,7 @@ spec:
                 value: "examples-confidential"
               - op: replace
                 path: /spec/template/spec/source/helm/valuesObject/layout/repoURL
-                value: "https://github.com/therealm-tech/argocd-layout-spec"
+                value: "https://github.com/therealm-tech/argocd-layout-spec.git"
               - op: replace
                 path: /spec/template/spec/source/helm/valuesObject/layout/targetRevision
                 value: "HEAD"
@@ -185,7 +185,7 @@ spec:
                 value: "examples-confidential"
               - op: replace
                 path: /spec/template/spec/source/repoURL
-                value: "https://github.com/therealm-tech/argocd-layout-spec"
+                value: "https://github.com/therealm-tech/argocd-layout-spec.git"
               - op: replace
                 path: /spec/template/spec/source/targetRevision
                 value: "HEAD"
