@@ -111,6 +111,45 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: dev.storage.lab-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    name: lab-1
+    namespace: dev-storage
+  sources:
+    - repoURL: https://github.com/therealm-tech/argocd-layout-spec
+      targetRevision: "HEAD"
+      path: examples/base
+      kustomize:
+        components:
+          - ../catalog/apps/storage/manifests
+        patches:
+          - target:
+              group: storage.k8s.io
+              kind: StorageClass
+              name: fast
+            patch: |-
+              - op: replace
+                path: /parameters/pool
+                value: "fast-pool"
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Source: layout/templates/applications.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: dev.switched.lab-1
   namespace: argocd
 spec:

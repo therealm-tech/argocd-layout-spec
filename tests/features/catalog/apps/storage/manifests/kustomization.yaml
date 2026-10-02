@@ -1,0 +1,4 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - resources/storage.k8s.io/StorageClass/fast.yaml

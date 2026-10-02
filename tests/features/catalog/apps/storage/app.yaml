@@ -1,0 +1,4 @@
+manifests:
+  properties:
+    storage.k8s.io/StorageClass/fast:
+      /parameters/pool: storagePool

@@ -1,6 +1,7 @@
 registry: registry.example.com
 replicas: 2
 bigNumber: 12345678
+storagePool: fast-pool
 Error: not a parse error
 debug: true
 apiURL: https://api.example.com

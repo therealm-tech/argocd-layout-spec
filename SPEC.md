@@ -93,7 +93,7 @@ manifests/
 5. A directory or file that does not match a declared environment, cluster,
    app, instance or source is an error (orphan), placeholders such as
    `.gitkeep` and documentation such as a `README.md` included: everything
-   under `envs/` and `clusters/` is layout. Orphans are checked against declared names, not
+   under `catalog/apps/`, `envs/` and `clusters/` is layout. Orphans are checked against declared names, not
    against the merged configuration: a values file whose source a higher layer
    removes is unused, not an orphan.
 
@@ -221,6 +221,10 @@ deploys the instance, merged across layers like the rest of the file:
 | `ignoreDifferences` | Argo CD `ignoreDifferences` entries, for fields a controller rewrites after the sync, such as injected CA bundles |
 
 No other field is allowed: when and how an Application syncs is operations.
+The native wiring's own options are `CreateNamespace=true`, and
+`RespectIgnoreDifferences=true` when `ignoreDifferences` is set, so that a
+sync leaves the ignored fields alone instead of only hiding their
+difference.
 
 ## 7. Values
 
@@ -234,7 +238,8 @@ No other field is allowed: when and how an Application syncs is operations.
 
 ## 8. Manifests
 
-1. `manifests/` is a Kustomize `Component`, in every layer. The wiring stacks
+1. `manifests/` is a Kustomize `Component`
+   (`apiVersion: kustomize.config.k8s.io/v1alpha1`), in every layer. The wiring stacks
    the components of an instance's layers, in layer order, on an empty base.
    A component in a separate catalog is fetched from the catalog's repository;
    the others MUST be in the same repository as the base.
@@ -244,7 +249,9 @@ No other field is allowed: when and how an Application syncs is operations.
    file of `resources/`, and `patches` every file of `patches/`, each as a
    single `path`.
 3. A file of `resources/` holds exactly one resource, in a single YAML
-   document, and is named after its identity.
+   document, and is named after its identity. A resource MUST NOT set
+   `metadata.namespace: default`: Kustomize does not tell it apart from a
+   resource that sets none, so two identities would name one resource.
 4. A file of `patches/` is a strategic merge patch named after the identity of
    its target. The target MUST be present once the lower layers and the
    resources of the patch's own layer are applied, and the patch MUST carry
@@ -258,7 +265,7 @@ No other field is allowed: when and how an Application syncs is operations.
 6. `patches/` targets only the manifests of the layout, never the resources
    rendered from the sources.
 7. Two instances on one cluster, all environments included, MUST NOT deploy
-   the same resource, identified by its kind, its name and the namespace it
+   the same resource, identified by its identity (§2) and the namespace it
    lands in: its own, or else the instance's. An instance whose layers delete
    a resource does not deploy it. This bites whatever does not depend on the
    instance: a cluster-scoped resource, a resource that sets its namespace or
@@ -406,6 +413,11 @@ This section is informative. A layout can be assembled by Argo CD alone:
    source; those surface when the instance's Application renders or syncs.
    It cannot see a file no rendered cluster reads either, such as an
    environment placed nowhere, or one whose `env.yaml` is misnamed.
+   The values files of a default or cluster layer are checked against the
+   instances on the cluster; those of an app no instance there uses are not.
+   A mapping onto a resource without a namespace names `namespace: default`
+   in its Kustomize target, except for the kinds Kustomize knows to be
+   cluster-scoped, which a target with a namespace never matches.
    Every Application stacks its components on the same base directory, which
    `kustomize edit` rewrites while it renders: Argo CD's repo-server renders
    them one after the other, which slows the refresh of a large layout.
@@ -422,8 +434,9 @@ This section is informative. A layout can be assembled by Argo CD alone:
    the number of Helm sources: adding a source never renames another one's
    release, and an app with several Helm sources names them. The defaults can
    still meet: `a-b`/`c` and `a`/`b-c` both default to `a-b-c`, and a
-   namespace an instance pins can be another one's default; the render fails
-   then. Names
+   namespace an instance pins can be another one's default. Sharing a
+   namespace is fine; the render fails when two instances would share a Helm
+   release or an object of their manifests there. Names
    a chart derives from its release, such as its ClusterRoles, are then
    unique across environments. Two instances installing the same release in
    the same namespace of a cluster fail the render, and so does a release

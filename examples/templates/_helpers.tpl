@@ -139,8 +139,8 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- $dir := printf "%s/manifests" .layer -}}
 {{- $kustomization := printf "%s/kustomization.yaml" $dir -}}
 {{- $k := include "layout.parse" (merge (dict "path" $kustomization) $io) | fromJson -}}
-{{- if ne (toString $k.kind) "Component" -}}
-{{- fail (printf "%s: must be a Kustomize Component (SPEC §8.1)" $kustomization) -}}
+{{- if or (ne (toString $k.kind) "Component") (ne (toString $k.apiVersion) "kustomize.config.k8s.io/v1alpha1") -}}
+{{- fail (printf "%s: must be a Kustomize Component, apiVersion kustomize.config.k8s.io/v1alpha1 (SPEC §8.1)" $kustomization) -}}
 {{- end -}}
 {{- range $field, $_ := $k -}}
 {{- if not (has $field (list "apiVersion" "kind" "resources" "patches")) -}}
@@ -182,6 +182,9 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- end -}}
 {{- $obj := include "layout.parse" (merge (dict "path" $file) $io) | fromJson -}}
 {{- $identity := include "layout.identity" (dict "obj" $obj "context" $file) -}}
+{{- if eq (toString ($obj.metadata | default (dict)).namespace) "default" -}}
+{{- fail (printf "%s: sets namespace default, which Kustomize does not tell apart from none; leave it out (SPEC §8.3)" $file) -}}
+{{- end -}}
 {{- $kind := ternary "resources" "patches" (hasPrefix (printf "%s/resources/" $dir) $file) -}}
 {{- if ne $file (printf "%s/%s/%s.yaml" $dir $kind $identity) -}}
 {{- fail (printf "%s: must be named %s/%s.yaml after its content (SPEC §8.3)" $file $kind $identity) -}}
@@ -193,6 +196,17 @@ returns, as JSON, the identities it adds and the patches it applies, in order.
 {{- end -}}
 {{- end -}}
 {{- toJson $out -}}
+{{- end -}}
+
+{{/*
+The kinds Kustomize treats as cluster-scoped, measured on Kustomize 5.8 (the
+one Argo CD 3.5 runs). A target naming `namespace: default` never matches
+them, and the patch is silently dropped; any other kind, CRDs and recent
+built-in kinds such as ValidatingAdmissionPolicy or ServiceCIDR included, is
+namespaced to Kustomize.
+*/}}
+{{- define "layout.clusterScopedKinds" -}}
+{{- list "APIService" "CertificateSigningRequest" "ClusterRole" "ClusterRoleBinding" "ComponentStatus" "CSIDriver" "CSINode" "CustomResourceDefinition" "IngressClass" "MutatingWebhookConfiguration" "Namespace" "Node" "PersistentVolume" "PriorityClass" "RuntimeClass" "StorageClass" "ValidatingWebhookConfiguration" "VolumeAttachment" | toJson -}}
 {{- end -}}
 
 {{/* A Kustomize patch target from a resource identity (SPEC §2). */}}
@@ -209,7 +223,7 @@ kind: {{ index $parts 1 }}
 name: {{ index $nameParts 0 }}
 {{- if gt (len $nameParts) 1 }}
 namespace: {{ index $nameParts 1 }}
-{{- else }}
+{{- else if not (has (index $parts 1) (include "layout.clusterScopedKinds" . | fromJsonArray)) }}
 {{- /* Kustomize matches an empty namespace against every namespace; "default"
    matches only the resources that set none. */}}
 namespace: default

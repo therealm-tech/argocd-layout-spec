@@ -13,6 +13,10 @@ manifests:
     external-secrets.io/ClusterSecretStore/vault:
       /spec/provider/vault/server: vaultURL
 application:
+  syncOptions:
+    # Its ClusterSecretStore CRD exceeds the 256 KiB annotation a client-side
+    # apply stores.
+    - ServerSideApply=true
   ignoreDifferences:
     # The chart's cert-controller injects the CA bundles after the sync.
     - group: admissionregistration.k8s.io

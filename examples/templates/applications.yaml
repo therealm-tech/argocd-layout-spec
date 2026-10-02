@@ -116,17 +116,9 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- end -}}
 {{- range $directory, $_ := $appDirectories -}}
 {{- include "layout.checkLabel" (dict "name" (base $directory) "what" "app" "context" $directory) -}}
-{{- if contains "/overrides/" $directory -}}
-{{- /* An environment layer may declare the sources an override's values
-   files configure: those are checked with each instance. */ -}}
+{{- /* A higher layer may declare the sources these values files configure:
+   they are checked against the instances, once those are known. */ -}}
 {{- include "layout.checkAppDirectory" (merge (dict "layer" $directory) $io) -}}
-{{- else -}}
-{{- $declared := list -}}
-{{- range $name, $_ := (include "layout.parse" (merge (dict "path" (printf "%s/app.yaml" $directory)) $io) | fromJson).sources | default (dict) -}}
-{{- $declared = append $declared $name -}}
-{{- end -}}
-{{- include "layout.checkAppDirectory" (merge (dict "layer" $directory "declared" $declared) $io) -}}
-{{- end -}}
 {{- end -}}
 
 {{- /* Instances placed on this cluster. */ -}}
@@ -218,9 +210,10 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- $rel := trimPrefix (printf "%s/" $layer) $file -}}
 {{- if regexMatch "^values/[^/]+\\.yaml$" $rel -}}
 {{- $source := trimSuffix ".yaml" (trimPrefix "values/" $rel) -}}
-{{- if hasPrefix "clusters/" $layer -}}
-{{- /* A cluster layer serves every instance of the app on the cluster: its
-   values files are checked against all of them, once they are known. */ -}}
+{{- if or (hasPrefix "clusters/" $layer) (hasPrefix "catalog/" $layer) -}}
+{{- /* A default or cluster layer serves every instance of the app on the
+   cluster: its values files are checked against all of them, once they are
+   known. */ -}}
 {{- $_ := set $overrideSources $layer (concat (index $overrideSources $layer | default (list)) $declaredSources) -}}
 {{- else if not (has $source $declaredSources) -}}
 {{- fail (printf "%s: no layer of %s declares a source %q (SPEC §3.5)" $file $context $source) -}}

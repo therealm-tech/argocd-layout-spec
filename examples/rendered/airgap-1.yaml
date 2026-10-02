@@ -88,6 +88,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - RespectIgnoreDifferences=true
+      - ServerSideApply=true
   ignoreDifferences:
     - group: admissionregistration.k8s.io
       jqPathExpressions:

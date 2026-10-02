@@ -45,8 +45,10 @@ line with what a Git repository describes. Three of its objects matter here:
 - An **ApplicationSet** generates Applications from a template, here one per
   cluster registered in Argo CD.
 
-Nothing in this example syncs on its own: every Application shows what would
-change, and applies it when someone syncs it.
+Nothing in this example deploys on its own: every Application shows what would
+change, and applies it when someone syncs it. The one automatic step is the
+ApplicationSet's: it creates, updates and deletes the `layout-<cluster>`
+Applications themselves, one per registered cluster.
 
 ## Anatomy of an app directory
 
@@ -142,7 +144,7 @@ application:                   # settings of the Argo CD Application
   ignoreDifferences: []
 ```
 
-Four things to know about them:
+Five things to know about them:
 
 - **A property wins over the values files.** `global.imageRegistry` above is
   set from `dockerImages` after every values file is read, so writing it in a
@@ -154,6 +156,11 @@ Four things to know about them:
   give it a default in [catalog/properties.yaml](catalog/properties.yaml).
 - **`null` removes.** In any layer, `<field>: null` deletes what the layers
   below set, a whole source included.
+- **Large CRDs need `ServerSideApply=true`.** A client-side apply stores the
+  whole object in an annotation capped at 256 KiB; external-secrets and Rook
+  ship CRDs above it, hence their `application.syncOptions`. When
+  `ignoreDifferences` is set, the wiring adds `RespectIgnoreDifferences=true`,
+  so that a sync leaves those fields alone instead of rewriting them.
 - **Maps merge, lists replace.** A layer that writes `application.syncOptions`
   or `ignoreDifferences` replaces the whole list of the layers below: it
   repeats the entries it keeps. The wiring's own sync options, such as
@@ -162,6 +169,30 @@ Four things to know about them:
 
 Under `manifests.properties`, a field is a *JSON pointer*: the path to it in
 the object, one `/` per level, as in `/spec/secretStoreRef/name`.
+
+## Properties
+
+A property is set in up to four files. For an instance, the most specific one
+that sets it wins:
+
+| File | Applies to |
+| --- | --- |
+| `envs/<env>/clusters/<cluster>/properties.yaml` | one environment on one cluster |
+| `clusters/<cluster>/properties.yaml` | every environment on that cluster |
+| `envs/<env>/properties.yaml` | one environment, on every cluster |
+| `catalog/properties.yaml` | everything: the defaults |
+
+The cluster wins over the environment because what a cluster can reach — a
+registry, a Vault — is a fact about the cluster. A property only reaches the
+apps whose `app.yaml` maps it: changing one changes nothing for an app that
+does not ask for it.
+
+Some objects exist once per cluster and serve every environment on it, such
+as the `ClusterSecretStore` external-secrets uses. One environment that needs
+a different variant does not change it: it adds a second object next to it,
+in the cluster layer of the app that owns it
+(`clusters/<cluster>/overrides/<app>/manifests/`), and points its own apps at
+it with a property set for that environment on that cluster.
 
 ## How the pieces fit
 
@@ -345,6 +376,7 @@ The recipes, with the file each one touches:
 | add, change or remove a Kubernetes object | `manifests/` of the matching layer: `resources/` to add, `patches/` to change or delete | the file is named after the object; a patch on a custom resource replaces its lists whole |
 | add an Argo CD sync option or ignored difference | `application:` in the matching `app.yaml` | lists replace: repeat the entries of the layers below; the wiring's options stay |
 | deploy another chart with an instance, in its namespace | a new entry under `sources:` in the matching `app.yaml`, its values in `values/<source>.yaml` | give it a `releaseName`: two charts of one instance cannot share a release name |
+| use another variant of a cluster-wide object for one environment | a second object in `clusters/<cluster>/overrides/<app>/manifests/`, and a property in `envs/<env>/clusters/<cluster>/properties.yaml` | see "Properties" above |
 | share a local app with another environment | move `envs/<env>/instances/<instance>/` to `catalog/apps/<app>/`, and drop `local: true` | |
 
 When a value does not show up, read the instance's Application in Argo CD
