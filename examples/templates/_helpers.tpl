@@ -77,11 +77,14 @@ true
 
 {{/* Layout file .path parsed as YAML, as JSON; an empty map when it does not exist. */}}
 {{- define "layout.parse" -}}
-{{- $content := include "layout.read" . | fromYaml -}}
-{{- if and (hasKey $content "Error") (eq (len $content) 1) -}}
+{{- /* fromYaml reports a parse error as a map holding only `Error`, which a
+   file may legitimately hold too: a probe key added to the content tells the
+   two apart. */ -}}
+{{- $content := printf "%s\n__layout_probe__: true\n" (include "layout.read" .) | fromYaml -}}
+{{- if not (hasKey $content "__layout_probe__") -}}
 {{- fail (printf "%s: %s" .path $content.Error) -}}
 {{- end -}}
-{{- toJson $content -}}
+{{- toJson (omit $content "__layout_probe__") -}}
 {{- end -}}
 
 {{/* Merges every existing file of .paths, in order, into .dst. */}}
@@ -206,6 +209,10 @@ kind: {{ index $parts 1 }}
 name: {{ index $nameParts 0 }}
 {{- if gt (len $nameParts) 1 }}
 namespace: {{ index $nameParts 1 }}
+{{- else }}
+{{- /* Kustomize matches an empty namespace against every namespace; "default"
+   matches only the resources that set none. */}}
+namespace: default
 {{- end }}
 {{- end -}}
 

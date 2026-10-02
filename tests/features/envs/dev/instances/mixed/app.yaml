@@ -1,0 +1,7 @@
+sources:
+  extra:
+    type: helm
+    repoURL: registry.example.com/charts
+    chart: extra
+    targetRevision: "0.1.0"
+    releaseName: extra

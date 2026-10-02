@@ -34,6 +34,13 @@ spec:
             value: "2"
           - name: resources.limits.bytes
             value: "12345678"
+    - repoURL: registry.example.com/charts
+      chart: extra
+      targetRevision: "0.1.0"
+      helm:
+        releaseName: extra
+        valueFiles:
+          - $layout/examples/clusters/lab-1/overrides/mixed/values/extra.yaml
     - repoURL: https://git.example.com/library
       path: jsonnet
       targetRevision: "main"
@@ -54,6 +61,7 @@ spec:
               group: apps
               kind: Deployment
               name: overlay
+              namespace: default
             patch: |-
               - op: replace
                 path: /spec/replicas
@@ -76,6 +84,7 @@ spec:
           - target:
               kind: ConfigMap
               name: settings
+              namespace: default
             patch: |-
               - op: replace
                 path: /data/api

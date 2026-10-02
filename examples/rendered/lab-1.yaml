@@ -72,6 +72,7 @@ spec:
               group: external-secrets.io
               kind: ClusterSecretStore
               name: vault
+              namespace: default
             patch: |-
               - op: replace
                 path: /spec/provider/vault/server
@@ -290,6 +291,7 @@ spec:
               group: external-secrets.io
               kind: ExternalSecret
               name: grafana-admin
+              namespace: default
             patch: |-
               - op: replace
                 path: /spec/secretStoreRef/name
@@ -344,6 +346,7 @@ spec:
               group: external-secrets.io
               kind: ExternalSecret
               name: grafana-admin
+              namespace: default
             patch: |-
               - op: replace
                 path: /spec/secretStoreRef/name

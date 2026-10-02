@@ -116,22 +116,23 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- end -}}
 {{- range $directory, $_ := $appDirectories -}}
 {{- include "layout.checkLabel" (dict "name" (base $directory) "what" "app" "context" $directory) -}}
-{{- $declarations := list $directory -}}
 {{- if contains "/overrides/" $directory -}}
-{{- $declarations = append $declarations (printf "catalog/apps/%s" (base $directory)) -}}
-{{- end -}}
+{{- /* An environment layer may declare the sources an override's values
+   files configure: those are checked with each instance. */ -}}
+{{- include "layout.checkAppDirectory" (merge (dict "layer" $directory) $io) -}}
+{{- else -}}
 {{- $declared := list -}}
-{{- range $layer := $declarations -}}
-{{- range $name, $_ := (include "layout.parse" (merge (dict "path" (printf "%s/app.yaml" $layer)) $io) | fromJson).sources | default (dict) -}}
+{{- range $name, $_ := (include "layout.parse" (merge (dict "path" (printf "%s/app.yaml" $directory)) $io) | fromJson).sources | default (dict) -}}
 {{- $declared = append $declared $name -}}
 {{- end -}}
-{{- end -}}
 {{- include "layout.checkAppDirectory" (merge (dict "layer" $directory "declared" $declared) $io) -}}
+{{- end -}}
 {{- end -}}
 
 {{- /* Instances placed on this cluster. */ -}}
 {{- $namespaces := dict -}}
 {{- $apps := dict -}}
+{{- $overrideSources := dict -}}
 {{- range $env, $e := $envs }}
 {{- if hasKey $e.clusters $cluster }}
 {{- $disabled := (index $e.clusters $cluster | default (dict)).disabled | default (list) -}}
@@ -217,7 +218,11 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- $rel := trimPrefix (printf "%s/" $layer) $file -}}
 {{- if regexMatch "^values/[^/]+\\.yaml$" $rel -}}
 {{- $source := trimSuffix ".yaml" (trimPrefix "values/" $rel) -}}
-{{- if not (has $source $declaredSources) -}}
+{{- if hasPrefix "clusters/" $layer -}}
+{{- /* A cluster layer serves every instance of the app on the cluster: its
+   values files are checked against all of them, once they are known. */ -}}
+{{- $_ := set $overrideSources $layer (concat (index $overrideSources $layer | default (list)) $declaredSources) -}}
+{{- else if not (has $source $declaredSources) -}}
 {{- fail (printf "%s: no layer of %s declares a source %q (SPEC §3.5)" $file $context $source) -}}
 {{- end -}}
 {{- $types := index $typesByLayer $layer -}}
@@ -256,12 +261,13 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- $fixedIdentities := list -}}
+{{- $namespace := $spec.namespace | default (printf "%s-%s" $env $instance) -}}
+{{- $deployed := list -}}
 {{- range $identity, $_ := $present -}}
 {{- if contains "_" $identity -}}
-{{- $fixedIdentities = append $fixedIdentities $identity -}}
-{{- else if $spec.namespace -}}
-{{- $fixedIdentities = append $fixedIdentities (printf "%s_%s" $identity $spec.namespace) -}}
+{{- $deployed = append $deployed $identity -}}
+{{- else -}}
+{{- $deployed = append $deployed (printf "%s_%s" $identity $namespace) -}}
 {{- end -}}
 {{- end -}}
 {{- $manifestMapping := ($spec.manifests | default (dict)).properties | default (dict) -}}
@@ -275,7 +281,6 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- end -}}
 
 {{- /* Namespace and Helm releases, unique together on the cluster (SPEC §6, §12). */ -}}
-{{- $namespace := $spec.namespace | default (printf "%s-%s" $env $instance) -}}
 {{- if not $spec.namespace -}}
 {{- $key := printf "default namespace %s" $namespace -}}
 {{- if hasKey $namespaces $key -}}
@@ -293,19 +298,19 @@ mistake in one environment never blocks the clusters it does not run on.
 {{- $releases := dict -}}
 {{- range $name := $helmSources -}}
 {{- $release := toString ((index $sources $name).releaseName | default (printf "%s-%s" $env $instance)) -}}
-{{- if not (and (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $release) (le (len $release) 53)) -}}
-{{- fail (printf "%s, source %s: Helm release name %q must be a lowercase name of at most 53 characters; set releaseName, or shorten the environment or instance name" $context $name $release) -}}
+{{- if not (and (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" $release) (le (len $release) 53)) -}}
+{{- fail (printf "%s, source %s: Helm release name %q is not a valid release name of at most 53 characters; set releaseName, or shorten the environment or instance name" $context $name $release) -}}
 {{- end -}}
 {{- $key := printf "%s/%s" $namespace $release -}}
 {{- if hasKey $namespaces $key -}}
-{{- fail (printf "%s and %s both install Helm release %q in namespace %q; set releaseName on one of them, as an app with several Helm sources must (SPEC §6.1.2)" (index $namespaces $key) (printf "%s, source %s" $context $name) $release $namespace) -}}
+{{- fail (printf "%s and %s both install Helm release %q in namespace %q; set releaseName on one of them, as an app with several Helm sources must (SPEC §6.1.5)" (index $namespaces $key) (printf "%s, source %s" $context $name) $release $namespace) -}}
 {{- end -}}
 {{- $_ := set $namespaces $key (printf "%s, source %s" $context $name) -}}
 {{- $_ := set $releases $name $release -}}
 {{- end -}}
-{{- range $identity := $fixedIdentities -}}
+{{- range $identity := $deployed -}}
 {{- if hasKey $apps $identity -}}
-{{- fail (printf "%s and %s both deploy %s to a namespace that does not depend on the instance (SPEC §8.7)" (index $apps $identity) $context $identity) -}}
+{{- fail (printf "%s and %s both deploy %s (SPEC §8.7)" (index $apps $identity) $context $identity) -}}
 {{- end -}}
 {{- $_ := set $apps $identity $context -}}
 {{- end }}
@@ -479,4 +484,12 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
+{{- end }}
+{{- range $layer, $declared := $overrideSources -}}
+{{- range $file := include "layout.glob" (merge (dict "path" (printf "%s/values" $layer)) $io) | fromJsonArray -}}
+{{- $source := trimSuffix ".yaml" (base $file) -}}
+{{- if not (has $source $declared) -}}
+{{- fail (printf "%s: no instance of this app on %s declares a source %q (SPEC §3.5)" $file $cluster $source) -}}
+{{- end -}}
+{{- end -}}
 {{- end }}

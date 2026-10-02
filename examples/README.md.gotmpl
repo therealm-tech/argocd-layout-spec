@@ -69,8 +69,9 @@ catalog/apps/grafana/
                 └── grafana-admin.yaml    its name
 ```
 
-Files under `manifests/` are named after the object they hold, so the path is
-enough to find one:
+Files under `manifests/` are named after the object they hold — its
+*identity*, `<group>/<kind>/<name>`, which error messages quote — so the path
+is enough to find one:
 
 - objects of the core API (`apiVersion: v1`: ConfigMap, Secret…) use `core`
   as their group, as in
@@ -80,7 +81,9 @@ enough to find one:
   [ApplicationSet/layout_argocd.yaml](catalog/apps/layout/manifests/resources/argoproj.io/ApplicationSet/layout_argocd.yaml),
   which lives in `argocd`;
 - `resources/` adds objects, and `patches/` changes the objects of the layers
-  below. A patch holding `$patch: delete` removes one, as
+  below. A patch is a *strategic merge patch*: a partial copy of the object
+  holding only the fields to change, with the object's `apiVersion`, `kind`
+  and `name`. A patch holding `$patch: delete` removes the object, as
   [the letsencrypt issuer on airgap-1](clusters/airgap-1/overrides/cert-manager/manifests/patches/cert-manager.io/ClusterIssuer/letsencrypt.yaml),
   which cannot reach Let's Encrypt.
 
@@ -153,7 +156,12 @@ Four things to know about them:
   below set, a whole source included.
 - **Maps merge, lists replace.** A layer that writes `application.syncOptions`
   or `ignoreDifferences` replaces the whole list of the layers below: it
-  repeats the entries it keeps.
+  repeats the entries it keeps. The wiring's own sync options, such as
+  `CreateNamespace=true`, are kept whatever the list, unless it names them
+  with another value.
+
+Under `manifests.properties`, a field is a *JSON pointer*: the path to it in
+the object, one `/` per level, as in `/spec/secretStoreRef/name`.
 
 ## How the pieces fit
 
@@ -200,8 +208,8 @@ applied. It checks the catalog, the environments placed on that cluster and
 the cluster's own directory — so a typo in `staging` never blocks `airgap-1`,
 which does not run it. It checks names, files that match nothing, how each
 instance resolves, the sources, the values files, every `manifests/`
-directory, the properties, and that no two instances share a Helm release in
-a namespace. What it cannot see surfaces when the instance's own Application
+directory, the properties, and that no two instances share a Helm release or
+deploy the same object of `manifests/` in one namespace. What it cannot see surfaces when the instance's own Application
 renders or syncs: the objects a chart renders, a property mapped to a field
 that does not exist, and two apps installing the same cluster-wide object —
 which is why such apps go in `platform`, once per cluster.
@@ -335,8 +343,18 @@ The recipes, with the file each one touches:
 | change a chart version | `targetRevision` in the `app.yaml` of the matching layer | quoted |
 | change what a cluster can reach (a registry, a Vault) | `clusters/<cluster>/properties.yaml` | every property used must keep a value for every placement |
 | add, change or remove a Kubernetes object | `manifests/` of the matching layer: `resources/` to add, `patches/` to change or delete | the file is named after the object; a patch on a custom resource replaces its lists whole |
-| add an Argo CD sync option or ignored difference | `application:` in the matching `app.yaml` | lists replace: repeat the entries of the layers below |
+| add an Argo CD sync option or ignored difference | `application:` in the matching `app.yaml` | lists replace: repeat the entries of the layers below; the wiring's options stay |
+| deploy another chart with an instance, in its namespace | a new entry under `sources:` in the matching `app.yaml`, its values in `values/<source>.yaml` | give it a `releaseName`: two charts of one instance cannot share a release name |
 | share a local app with another environment | move `envs/<env>/instances/<instance>/` to `catalog/apps/<app>/`, and drop `local: true` | |
+
+When a value does not show up, read the instance's Application in Argo CD
+(the App details, or `argocd app get <env>.<instance>.<cluster> -o yaml`): its
+`valueFiles` are applied in order, the last one winning, and its `parameters`
+come after all of them. The file or the property that sets the value is
+there.
+
+A synced Application whose objects differ from Git again is **OutOfSync**:
+that is what a sync clears.
 
 Three changes need more care:
 

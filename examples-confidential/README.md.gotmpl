@@ -39,12 +39,20 @@ flowchart LR
   layout's ApplicationSet on `aws-1`, [envs/acme/](envs/acme/) runs Grafana
   there, and [clusters/aws-1/](clusters/aws-1/) adapts them to AWS: its
   secret store is AWS Secrets Manager instead of the catalog's Vault, and its
-  certificate issuer proves domain ownership through Route 53 DNS. A second
-  AWS cluster repeats `clusters/aws-1/`: properties and overrides are per
-  cluster, and nothing groups clusters. In `env.yaml`, it disables `layout`,
-  which runs only where Argo CD does. The AWS store and the Route 53 issuer
-  also need AWS permissions for their service accounts (IRSA or EKS Pod
-  Identity), which this layout does not set up.
+  certificate issuer proves domain ownership through Route 53 DNS. The AWS
+  store and the Route 53 issuer also need AWS permissions for their service
+  accounts (IRSA, IAM Roles for Service Accounts, or EKS Pod Identity), which
+  this layout does not set up.
+- **A second AWS cluster, `aws-2`, repeats `clusters/aws-1/`**: properties and
+  overrides are per cluster, and nothing groups clusters. In full:
+  - register `aws-2` in Argo CD;
+  - list it under `clusters:` in [envs/acme/env.yaml](envs/acme/env.yaml), and
+    in [envs/platform/env.yaml](envs/platform/env.yaml) with `layout`
+    disabled, since the ApplicationSet runs only where Argo CD does;
+  - copy `clusters/aws-1/` to `clusters/aws-2/`. Its
+    `overrides/external-secrets/app.yaml` matters: it removes the mapping of
+    the Vault store's URL, which would otherwise target the store its
+    manifests delete, and fail the render.
 - **The wiring is the same chart** as in [examples/](../examples/), shared
   through symbolic links. A real private repository would copy
   [templates/](templates/), or take them from a Helm library chart whose

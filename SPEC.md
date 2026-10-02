@@ -92,7 +92,8 @@ manifests/
    `null` value.
 5. A directory or file that does not match a declared environment, cluster,
    app, instance or source is an error (orphan), placeholders such as
-   `.gitkeep` included. Orphans are checked against declared names, not
+   `.gitkeep` and documentation such as a `README.md` included: everything
+   under `envs/` and `clusters/` is layout. Orphans are checked against declared names, not
    against the merged configuration: a values file whose source a higher layer
    removes is unused, not an orphan.
 
@@ -127,7 +128,8 @@ precedence. Each higher layer is applied on top of the ones below.
 | Cluster app | `clusters/<c>/apps/<app>/` | `envs/<e>/instances/<i>/` | — | `envs/<e>/clusters/<c>/instances/<i>/` |
 | Local instance | — | `envs/<e>/instances/<i>/` | — | `envs/<e>/clusters/<c>/instances/<i>/` |
 
-1. The **lowest layer** of an instance is its first layer in that order.
+1. Any layer MAY be missing, except the first one of the instance's row: the
+   app's default layer, or a local instance's environment layer.
 2. The cluster layer is keyed by app and applies to every instance of that app
    on the cluster, over their environment layers. What must differ between two
    instances on one cluster belongs in the placement layer.
@@ -187,6 +189,9 @@ data must survive first pins both in its environment layer.
    naming a property. It is the only source field that MAY take a property.
 4. After all layers are merged, every source MUST have `type`, `repoURL`,
    `targetRevision`, and exactly one of `chart` and `path`.
+5. The Helm sources of an instance MUST have distinct release names. A wiring
+   MAY give all of them the same default, so an app with several Helm sources
+   SHOULD set `releaseName` on all of them but one.
 
 ### 6.2 Merge
 
@@ -220,9 +225,10 @@ No other field is allowed: when and how an Application syncs is operations.
 ## 7. Values
 
 1. `values/<source>.yaml` holds the Helm values of the source `<source>`. It
-   exists only in a layer where the source, as merged up to that layer, is a
-   `helm` source. A higher layer that changes the source's type leaves it
-   unused.
+   MUST NOT exist in a layer where the source, as merged up to that layer,
+   exists and is not a `helm` source. A values file in a layer below the one
+   declaring its source applies once the source is declared; a higher layer
+   that changes the source's type leaves it unused.
 2. The values files of a source are passed to Helm in layer order, lowest
    first. They merge by Helm's own rules.
 
@@ -251,12 +257,13 @@ No other field is allowed: when and how an Application syncs is operations.
    already present: Kustomize rejects the duplicate before applying patches.
 6. `patches/` targets only the manifests of the layout, never the resources
    rendered from the sources.
-7. A resource whose identity does not depend on the instance exists once per
-   cluster: a cluster-scoped resource, a resource of the layout's manifests
-   that sets its namespace or that goes to a namespace `namespace` sets, or a
-   resource a source renders with a fixed name, such as a CRD. At most one instance per cluster, all environments included,
-   MAY keep such a resource once its layers are applied; an instance whose
-   layers delete it does not count. Operators and other cluster-wide apps
+7. Two instances on one cluster, all environments included, MUST NOT deploy
+   the same resource, identified by its kind, its name and the namespace it
+   lands in: its own, or else the instance's. An instance whose layers delete
+   a resource does not deploy it. This bites whatever does not depend on the
+   instance: a cluster-scoped resource, a resource that sets its namespace or
+   lands in a namespace `namespace` names, or a resource a source renders
+   with a fixed name, such as a CRD. Operators and other cluster-wide apps
    therefore usually belong to a single environment per cluster.
 
 ## 9. Properties
@@ -303,8 +310,9 @@ across layers like the rest of the file; setting an entry to `null` removes it.
 | `manifests.properties` | a map from resource identity to a map from JSON pointer to property | `kustomize.patches` of the manifests (`op: replace`) |
 
 1. A `directory` source takes no mapping.
-2. The resource targeted by `manifests.properties` MUST exist once all layers
-   are applied, and so MUST the field each JSON pointer designates: the
+2. A resource identity without a namespace designates the resource that sets
+   none, never one of the same name in another namespace. The resource
+   targeted by `manifests.properties` MUST exist once all layers are applied, and so MUST the field each JSON pointer designates: the
    property replaces a value, and never adds one.
 3. A mapped value is applied after every layer: a Helm parameter overrides
    every values file, and a Kustomize patch applies after every component. A
@@ -358,8 +366,8 @@ A conforming layout has none of the following:
    than one YAML document (§8.3);
 10. a patch whose target is absent or has another `apiVersion`, or a resource
     added twice (§8.4, §8.5);
-11. an app holding resources of a fixed identity instantiated several times on
-    one cluster (§8.7);
+11. two instances deploying the same resource on one cluster (§8.7), or two
+    Helm sources of an instance sharing a release name (§6.1.5);
 12. a reference to an undefined property, or a property that is not a scalar
     (§9.1, §9.2.3);
 13. a mapping on a `directory` source (§9.3.1);
@@ -367,7 +375,8 @@ A conforming layout has none of the following:
 15. an undeclared instance in `disabled`, or an instance with both `app` and
     `local` (§10);
 16. an `application` field other than `syncOptions` and `ignoreDifferences`
-    (§6.3).
+    (§6.3);
+17. an instance with neither a source nor manifests (§6.1.1).
 
 The layout does not support:
 
@@ -397,17 +406,24 @@ This section is informative. A layout can be assembled by Argo CD alone:
    source; those surface when the instance's Application renders or syncs.
    It cannot see a file no rendered cluster reads either, such as an
    environment placed nowhere, or one whose `env.yaml` is misnamed.
+   Every Application stacks its components on the same base directory, which
+   `kustomize edit` rewrites while it renders: Argo CD's repo-server renders
+   them one after the other, which slows the refresh of a large layout.
 4. It emits one Application per instance and placement: the merged sources,
    each with its tool set explicitly so that Argo CD never guesses it, the
    values files of every layer through `ref` sources, the Helm parameters,
    Jsonnet variables and Kustomize patches of the mapping, and the manifest
    components of every layer on the empty base.
-5. It names what it emits so that nothing collides: the Application
-   `<env>.<instance>.<cluster>` (`.` cannot appear in a name of the layout).
+5. It names what it emits, and rejects the layouts where two names would
+   collide: the Application `<env>.<instance>.<cluster>` (`.` cannot appear
+   in a name of the layout).
    An instance without `namespace` goes to `<env>-<instance>`, and a Helm
    source without `releaseName` is released as `<env>-<instance>`, whatever
    the number of Helm sources: adding a source never renames another one's
-   release, and an app with several Helm sources names them. Names
+   release, and an app with several Helm sources names them. The defaults can
+   still meet: `a-b`/`c` and `a`/`b-c` both default to `a-b-c`, and a
+   namespace an instance pins can be another one's default; the render fails
+   then. Names
    a chart derives from its release, such as its ClusterRoles, are then
    unique across environments. Two instances installing the same release in
    the same namespace of a cluster fail the render, and so does a release

@@ -1,1 +1,1 @@
-dev/one on lab-1 and qa/two on lab-1 both deploy core/ConfigMap/a_kube-system to a namespace that does not depend on the instance
+dev/one on lab-1 and qa/two on lab-1 both deploy core/ConfigMap/a_kube-system
